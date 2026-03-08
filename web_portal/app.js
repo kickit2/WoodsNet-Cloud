@@ -4,8 +4,11 @@ let API_BASE_URL = localStorage.getItem('woods_api_url') || '';
 let AUTH_TOKEN = localStorage.getItem('woods_auth_token') || '';
 let cachedImages = [];
 let muleMappings = {};
+let muleStatus = {};
 let isSelectMode = false;
 let selectedKeys = new Set();
+let currentNextToken = null;
+let isLoadingMore = false;
 
 // Map & Core Helpers
 let configMap = null;
@@ -36,14 +39,23 @@ const appContent = document.getElementById('app-content');
 const galleryGrid = document.getElementById('gallery-grid');
 const loadingState = document.getElementById('loading-state');
 const emptyState = document.getElementById('empty-state');
+const loadMoreContainer = document.getElementById('load-more-container');
+const loadMoreBtn = document.getElementById('load-more-btn');
 const refreshBtn = document.getElementById('refresh-btn');
 const logoutBtn = document.getElementById('logout-btn');
+
+const lightboxOverlay = document.getElementById('lightbox-overlay');
+const lightboxCloseBtn = document.getElementById('lightbox-close');
+const lightboxImg = document.getElementById('lightbox-img');
 
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const themeIconMoon = document.getElementById('theme-icon-moon');
 const themeIconSun = document.getElementById('theme-icon-sun');
 const dashboardBtn = document.getElementById('dashboard-btn');
 const analyticsDashboard = document.getElementById('analytics-dashboard');
+const liveDashboardBtn = document.getElementById('live-dashboard-btn');
+const liveDashboard = document.getElementById('live-dashboard');
+const dashboardGrid = document.getElementById('dashboard-grid');
 const mapViewBtn = document.getElementById('map-view-btn');
 const mainMapContainer = document.getElementById('main-map-container');
 
@@ -125,6 +137,7 @@ authForm.addEventListener('submit', async (e) => {
             const data = await response.json();
             cachedImages = data.images || [];
             muleMappings = data.mule_mappings || {};
+            muleStatus = data.mule_status || {};
             showApp();
             applySortAndRender();
         } else {
@@ -161,15 +174,29 @@ function showApp() {
 }
 
 // Data Fetching
-async function fetchImages() {
+async function fetchImages(loadMore = false) {
     if (!API_BASE_URL || !AUTH_TOKEN) return;
 
-    galleryGrid.innerHTML = '';
-    loadingState.classList.remove('hidden');
-    emptyState.classList.add('hidden');
+    if (!loadMore) {
+        galleryGrid.innerHTML = '';
+        loadingState.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+        loadMoreContainer.classList.add('hidden');
+        currentNextToken = null;
+    } else {
+        if (!currentNextToken || isLoadingMore) return;
+        isLoadingMore = true;
+        loadMoreBtn.textContent = "Loading...";
+        loadMoreBtn.disabled = true;
+    }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/list-images`, {
+        let url = `${API_BASE_URL}/list-images`;
+        if (loadMore && currentNextToken) {
+            url += `?next_token=${encodeURIComponent(currentNextToken)}`;
+        }
+
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${AUTH_TOKEN}`
             }
@@ -183,14 +210,31 @@ async function fetchImages() {
         if (!response.ok) throw new Error("API Fetch failed");
 
         const data = await response.json();
-        cachedImages = data.images || [];
-        muleMappings = data.mule_mappings || {};
+
+        if (loadMore) {
+            cachedImages = cachedImages.concat(data.images || []);
+            currentNextToken = data.next_token || null;
+            isLoadingMore = false;
+        } else {
+            cachedImages = data.images || [];
+            muleMappings = data.mule_mappings || {};
+            muleStatus = data.mule_status || {};
+            currentNextToken = data.next_token || null;
+        }
+
         applySortAndRender();
+
     } catch (err) {
         console.error("Fetch error:", err);
-        // Show empty state on error for MVP
-        loadingState.classList.add('hidden');
-        emptyState.classList.remove('hidden');
+        if (!loadMore) {
+            loadingState.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+        }
+    } finally {
+        if (loadMore) {
+            loadMoreBtn.textContent = "Load More";
+            loadMoreBtn.disabled = false;
+        }
     }
 }
 
@@ -255,8 +299,8 @@ function applySortAndRender() {
         renderCharts(filteredImages);
     }
 
-    if (!mainMapContainer.classList.contains('hidden')) {
-        renderMap(filteredImages);
+    if (!liveDashboard.classList.contains('hidden')) {
+        renderLiveDashboard(filteredImages);
     }
 
     renderGallery(filteredImages);
@@ -359,6 +403,106 @@ function renderCharts(images) {
     });
 }
 
+function renderLiveDashboard(images) {
+    dashboardGrid.innerHTML = '';
+
+    // Calculate per-mule stats from images (acting as offline fallback if muleStatus is missing)
+    const cameraStats = {};
+    images.forEach(img => {
+        const id = img.mule_id;
+        if (!cameraStats[id]) {
+            cameraStats[id] = { count: 0, latestImage: img };
+        }
+        cameraStats[id].count++;
+        if (new Date(img.timestamp) > new Date(cameraStats[id].latestImage.timestamp)) {
+            cameraStats[id].latestImage = img;
+        }
+    });
+
+    const uniqueMules = Object.keys(cameraStats);
+    if (uniqueMules.length === 0) {
+        dashboardGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 3rem;">No active cameras found.</div>';
+        return;
+    }
+
+    const docFrag = document.createDocumentFragment();
+
+    uniqueMules.forEach(id => {
+        const stats = cameraStats[id];
+        const statusData = muleStatus[id] || {};
+
+        let lastHeartbeatStr = statusData.last_heartbeat || stats.latestImage.timestamp;
+        const lastHeartbeat = new Date(lastHeartbeatStr);
+
+        // Calculate age
+        const hoursAgo = (new Date() - lastHeartbeat) / (1000 * 60 * 60);
+        let healthClass = 'healthy';
+        if (hoursAgo > 24) healthClass = 'offline';
+        else if (hoursAgo > 12) healthClass = 'warning';
+
+        const hbDisplay = lastHeartbeat.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+            lastHeartbeat.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const battery = statusData.battery || '--';
+        const signal = statusData.signal || '--';
+        const pl = statusData.power_level ? statusData.power_level.replace('PL', '') : '?';
+
+        const card = document.createElement('div');
+        card.className = 'status-card';
+        card.onclick = () => {
+            // For MVP, just close dashboard to show gallery
+            if (!liveDashboard.classList.contains('hidden')) {
+                liveDashboardBtn.click();
+            }
+        };
+
+        card.innerHTML = `
+            <div class="status-header">
+                <div class="status-title">
+                    <div class="status-indicator ${healthClass}"></div>
+                    ${getMuleName(id)}
+                    <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-secondary);">(${id})</span>
+                </div>
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${healthClass.toUpperCase()}</div>
+            </div>
+            
+            <div class="status-metrics">
+                <div class="metric">
+                    <span class="metric-label">Last Check-in</span>
+                    <span class="metric-value">
+                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <span style="font-size:0.85rem">${hbDisplay}</span>
+                    </span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Battery / Power</span>
+                    <span class="metric-value">
+                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="1" y="6" width="18" height="12" rx="2" ry="2"></rect><line x1="23" y1="13" x2="23" y2="11"></line></svg>
+                        ${battery}% <span style="font-size: 0.75rem; color: var(--text-secondary);">(PL${pl})</span>
+                    </span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Signal (RSSI)</span>
+                    <span class="metric-value">
+                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                        ${signal} dBm
+                    </span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Recent Captures</span>
+                    <span class="metric-value">
+                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        ${stats.count}
+                    </span>
+                </div>
+            </div>
+        `;
+        docFrag.appendChild(card);
+    });
+
+    dashboardGrid.appendChild(docFrag);
+}
+
 function renderGallery(images) {
     loadingState.classList.add('hidden');
 
@@ -456,7 +600,7 @@ function renderGallery(images) {
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                     </button>
                 </div>
-                <picture>
+                <picture style="cursor: zoom-in;" onclick="openLightbox('${img.url}')">
                     <source srcset="${img.url}" type="image/avif">
                     <img src="${img.url}" alt="Trail Camera Capture" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'img-fallback-msg\\'>⚠️ Image format not supported by browser viewer.<br>Download source to view.</div>'">
                 </picture>
@@ -473,6 +617,13 @@ function renderGallery(images) {
     });
 
     galleryGrid.appendChild(docFrag);
+
+    // Show/hide load more button
+    if (currentNextToken) {
+        loadMoreContainer.classList.remove('hidden');
+    } else {
+        loadMoreContainer.classList.add('hidden');
+    }
 }
 
 function updateStats(total, mules) {
@@ -495,8 +646,30 @@ function updateSelectionUI() {
     });
 }
 
+// Map interactions & Lightbox
+function openLightbox(url) {
+    if (isSelectMode) return; // Prevent full screen if just trying to check boxes
+    lightboxImg.src = url;
+    lightboxOverlay.classList.remove('hidden');
+    lightboxOverlay.classList.add('active');
+}
+
+function closeLightbox() {
+    lightboxOverlay.classList.remove('active');
+    setTimeout(() => {
+        lightboxOverlay.classList.add('hidden');
+        lightboxImg.src = '';
+    }, 300);
+}
+
+lightboxCloseBtn.addEventListener('click', closeLightbox);
+lightboxOverlay.addEventListener('click', (e) => {
+    if (e.target === lightboxOverlay) closeLightbox();
+});
+
 // Event Listeners
-refreshBtn.addEventListener('click', fetchImages);
+refreshBtn.addEventListener('click', () => fetchImages(false));
+loadMoreBtn.addEventListener('click', () => fetchImages(true));
 logoutBtn.addEventListener('click', logout);
 sortSelect.addEventListener('change', applySortAndRender);
 startDateInput.addEventListener('change', applySortAndRender);
@@ -505,9 +678,12 @@ if (aiFilterSelect) aiFilterSelect.addEventListener('change', applySortAndRender
 
 dashboardBtn.addEventListener('click', () => {
     analyticsDashboard.classList.toggle('hidden');
-    mainMapContainer.classList.add('hidden'); // Ensure map is hidden if opening dashboard
+    mainMapContainer.classList.add('hidden');
+    liveDashboard.classList.add('hidden');
     mapViewBtn.style.color = '';
     mapViewBtn.style.borderColor = '';
+    liveDashboardBtn.style.color = '';
+    liveDashboardBtn.style.borderColor = '';
 
     if (!analyticsDashboard.classList.contains('hidden')) {
         dashboardBtn.style.color = 'var(--accent)';
@@ -519,11 +695,33 @@ dashboardBtn.addEventListener('click', () => {
     }
 });
 
-mapViewBtn.addEventListener('click', () => {
-    mainMapContainer.classList.toggle('hidden');
-    analyticsDashboard.classList.add('hidden'); // Ensure dashboard is hidden
+liveDashboardBtn.addEventListener('click', () => {
+    liveDashboard.classList.toggle('hidden');
+    analyticsDashboard.classList.add('hidden');
+    mainMapContainer.classList.add('hidden');
     dashboardBtn.style.color = '';
     dashboardBtn.style.borderColor = '';
+    mapViewBtn.style.color = '';
+    mapViewBtn.style.borderColor = '';
+
+    if (!liveDashboard.classList.contains('hidden')) {
+        liveDashboardBtn.style.color = 'var(--accent)';
+        liveDashboardBtn.style.borderColor = 'var(--accent)';
+        applySortAndRender();
+    } else {
+        liveDashboardBtn.style.color = '';
+        liveDashboardBtn.style.borderColor = '';
+    }
+});
+
+mapViewBtn.addEventListener('click', () => {
+    mainMapContainer.classList.toggle('hidden');
+    analyticsDashboard.classList.add('hidden');
+    liveDashboard.classList.add('hidden');
+    dashboardBtn.style.color = '';
+    dashboardBtn.style.borderColor = '';
+    liveDashboardBtn.style.color = '';
+    liveDashboardBtn.style.borderColor = '';
 
     if (!mainMapContainer.classList.contains('hidden')) {
         mapViewBtn.style.color = 'var(--accent)';
@@ -550,7 +748,7 @@ themeToggleBtn.addEventListener('click', () => {
     }
 
     // Update chart colors if they are visible
-    if (!analyticsDashboard.classList.contains('hidden')) {
+    if (!analyticsDashboard.classList.contains('hidden') || !liveDashboard.classList.contains('hidden')) {
         applySortAndRender();
     }
 });

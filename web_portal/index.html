@@ -67,6 +67,22 @@
         </div>
     </div>
 
+    <!-- Lightbox Modal -->
+    <div id="lightbox-overlay" class="overlay hidden">
+        <button id="lightbox-close" class="action-btn"
+            style="position:absolute; top:1.5rem; right:1.5rem; z-index:60; width:44px; height:44px; border-radius:50%;">
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <div
+            style="max-width: 95vw; background: var(--bg-card); border-radius: var(--radius-lg); padding: 0.5rem; display: flex; flex-direction: column; box-shadow: var(--shadow-lg);">
+            <img id="lightbox-img" src="" alt="Full Resolution Capture"
+                style="max-width: 100%; max-height: 85vh; object-fit: contain; border-radius: var(--radius-md);">
+        </div>
+    </div>
+
     <!-- Main Application UI -->
     <div id="app-content" class="container hidden">
         <header class="app-header">
@@ -93,11 +109,17 @@
                         <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                     </svg>
                 </button>
-                <button id="dashboard-btn" class="btn-outline">
+                <button id="live-dashboard-btn" class="btn-outline" title="Live Camera Status">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    Dashboard
+                </button>
+                <button id="dashboard-btn" class="btn-outline" title="Analytics & Charts">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
                         <path d="M18 20V10M12 20V4M6 20v-6"></path>
                     </svg>
-                    Analytics
+                    Charts
                 </button>
                 <button id="map-view-btn" class="btn-outline">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
@@ -136,6 +158,12 @@
                 <div class="stat-item loading-pulse">
                     <span class="stat-label">Active Mules</span>
                     <span id="active-mules" class="stat-value">--</span>
+                </div>
+            </div>
+
+            <div id="live-dashboard" class="live-dashboard hidden">
+                <div class="dashboard-grid" id="dashboard-grid">
+                    <!-- Cards injected via JS -->
                 </div>
             </div>
 
@@ -194,6 +222,10 @@
 
             <div id="gallery-grid" class="gallery">
                 <!-- Image cards will be injected here via JavaScript -->
+            </div>
+
+            <div id="load-more-container" class="center-content hidden" style="padding: 2rem 0;">
+                <button id="load-more-btn" class="btn-outline" style="min-width: 200px;">Load More</button>
             </div>
 
             <div id="main-map-container" class="hidden"

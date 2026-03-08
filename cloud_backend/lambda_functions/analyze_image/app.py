@@ -3,6 +3,7 @@ import boto3
 import os
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 
 rekognition = boto3.client('rekognition')
 dynamodb = boto3.client('dynamodb')
@@ -180,7 +181,21 @@ def lambda_handler(event, context):
                 Item=item
             )
             
-            print(f"Successfully saved tags to DynamoDB for {key}")
+            # Update Mule Hardware State in DynamoDB for the Live Dashboard
+            state_item = {
+                'ImageKey': {'S': f"MULE_STATE#{mule_id}"},
+                'LastHeartbeat': {'S': datetime.now(timezone.utc).isoformat()},
+                # Mocking hardware telemetry for the MVP dashboard
+                'Battery': {'N': '92'}, 
+                'Signal': {'N': '-68'},
+                'PowerLevel': {'S': 'PL3_ACTIVE'}
+            }
+            dynamodb.put_item(
+                TableName=table_name,
+                Item=state_item
+            )
+            
+            print(f"Successfully saved tags and state to DynamoDB for {key}")
             
             # Trigger SNS Alerts for high-priority subjects
             sns_topic_arn = os.environ.get('SNS_TOPIC_ARN')

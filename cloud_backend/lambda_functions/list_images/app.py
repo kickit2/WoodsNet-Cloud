@@ -47,13 +47,19 @@ def lambda_handler(event, context):
             if e.response['Error']['Code'] != 'NoSuchKey':
                 print(f"Error fetching mappings config: {e}")
                 
-        # Fetch the list of objects
-        # We limit to 100 for this MVP, but production would need pagination (NextContinuationToken)
-        response = s3_client.list_objects_v2(
-            Bucket=bucket_name,
-            Prefix='woods-net/mules/',
-            MaxKeys=100
-        )
+        # Fetch the list of objects with pagination
+        query_params = event.get('queryStringParameters') or {}
+        continuation_token = query_params.get('next_token')
+        
+        list_kwargs = {
+            'Bucket': bucket_name,
+            'Prefix': 'woods-net/mules/',
+            'MaxKeys': 100
+        }
+        if continuation_token:
+            list_kwargs['ContinuationToken'] = continuation_token
+            
+        response = s3_client.list_objects_v2(**list_kwargs)
         
         images = []
         if 'Contents' in response:
@@ -94,6 +100,35 @@ def lambda_handler(event, context):
                 except Exception as e:
                     print(f"Error fetching AI tags from DynamoDB: {e}")
                     
+            # Fetch Mule Hardware States from DynamoDB
+            unique_mules = list(set([obj['Key'].split('/')[2] for obj in response.get('Contents', []) if len(obj['Key'].split('/')) >= 3 and not obj['Key'].endswith('/')]))
+            mule_status = {}
+            if unique_mules:
+                dynamodb = boto3.client('dynamodb')
+                table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
+                state_keys = [{'ImageKey': {'S': f"MULE_STATE#{mid}"}} for mid in unique_mules]
+                
+                # BatchGetItem supports up to 100 items, and we have ~few unique mules.
+                try:
+                    state_response = dynamodb.batch_get_item(
+                        RequestItems={
+                            table_name: {
+                                'Keys': state_keys,
+                                'AttributesToGet': ['ImageKey', 'LastHeartbeat', 'Battery', 'Signal', 'PowerLevel']
+                            }
+                        }
+                    )
+                    for item in state_response.get('Responses', {}).get(table_name, []):
+                        m_id = item['ImageKey']['S'].split('#')[1]
+                        mule_status[m_id] = {
+                            'last_heartbeat': item.get('LastHeartbeat', {}).get('S'),
+                            'battery': item.get('Battery', {}).get('N'),
+                            'signal': item.get('Signal', {}).get('N'),
+                            'power_level': item.get('PowerLevel', {}).get('S')
+                        }
+                except Exception as e:
+                    print(f"Error fetching mule statuses: {e}")
+                    
             # Sort by LastModified, newest first
             sorted_contents = sorted(response['Contents'], key=lambda obj: obj['LastModified'], reverse=True)
             
@@ -131,6 +166,8 @@ def lambda_handler(event, context):
                     'ai_data': ai_tags_map.get(key, {'has_animals': False, 'tags': {}, 'weather': None})
                 })
 
+        next_token = response.get('NextContinuationToken')
+
         return {
             'statusCode': 200,
             'headers': {
@@ -139,7 +176,7 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Headers': 'Authorization'
             },
-            'body': json.dumps({'images': images, 'mule_mappings': mule_mappings})
+            'body': json.dumps({'images': images, 'mule_mappings': mule_mappings, 'mule_status': mule_status, 'next_token': next_token})
         }
 
     except ClientError as e:
