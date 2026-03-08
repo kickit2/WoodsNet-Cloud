@@ -74,6 +74,14 @@ def lambda_handler(event, context):
 
     # Ensure key is decoded properly in case the frontend sent an encoded URI
     key = urllib.parse.unquote(key)
+    
+    # Basic Input Sanitization (Path Traversal Protection)
+    if '..' in key:
+        return {
+            'statusCode': 400,
+            'headers': cors_headers,
+            'body': json.dumps({'error': 'Invalid key format: path traversal detected.'})
+        }
 
     try:
         if action == 'delete':
@@ -95,6 +103,12 @@ def lambda_handler(event, context):
                 }
                 
             new_key = urllib.parse.unquote(new_key)
+            if '..' in new_key:
+                return {
+                    'statusCode': 400,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': 'Invalid new_key format: path traversal detected.'})
+                }
             
             # Prevent renaming to a different folder structure if we want to enforce it, 
             # or just allow it. For now, we just copy.

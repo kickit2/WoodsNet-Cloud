@@ -233,7 +233,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
     
     role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
     
-    def deploy_lambda(func_name, code_path, extra_env=None):
+    def deploy_lambda(func_name, code_path, extra_env=None, timeout=10):
         zip_path = f"{func_name}.zip"
         with zipfile.ZipFile(zip_path, 'w') as z:
             z.write(code_path, arcname='app.py')
@@ -256,7 +256,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                 Handler='app.lambda_handler',
                 Code={'ZipFile': zipped_code},
                 Environment={'Variables': env_vars},
-                Timeout=10
+                Timeout=timeout
             )
             print(f"    -> {func_name} created successfully.")
         except lambda_client.exceptions.ResourceConflictException:
@@ -267,7 +267,8 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
             )
             lambda_client.update_function_configuration(
                 FunctionName=func_name,
-                Environment={'Variables': env_vars}
+                Environment={'Variables': env_vars},
+                Timeout=timeout
             )
             print(f"    -> {func_name} updated.")
             
@@ -280,7 +281,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
     list_lambda_arn = deploy_lambda(list_func_name, 'lambda_functions/list_images/app.py')
     manage_lambda_arn = deploy_lambda(manage_func_name, 'lambda_functions/manage_image/app.py')
     timelapse_func_name = 'WoodsNetGenerateTimelapse'
-    timelapse_lambda_arn = deploy_lambda(timelapse_func_name, 'lambda_functions/generate_timelapse/app.py')
+    timelapse_lambda_arn = deploy_lambda(timelapse_func_name, 'lambda_functions/generate_timelapse/app.py', timeout=60)
     
     analyze_func_name = 'WoodsNetAnalyzeImage'
     analyze_env = {'SNS_TOPIC_ARN': sns_topic_arn}

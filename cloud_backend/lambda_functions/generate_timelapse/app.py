@@ -57,8 +57,8 @@ def lambda_handler(event, context):
         # Sort by oldest first for timeline order
         objects = sorted([obj for obj in response['Contents'] if not obj['Key'].endswith('/')], key=lambda x: x['LastModified'])
         
-        # Limit to last 100 images for Lambda processing constraints (timeout, space)
-        objects = objects[-100:] 
+        # Limit to last 50 images for Lambda processing constraints (timeout, space)
+        objects = objects[-50:] 
         
         with tempfile.TemporaryDirectory() as temp_dir:
             file_list_path = os.path.join(temp_dir, 'input.txt')
@@ -89,7 +89,9 @@ def lambda_handler(event, context):
                     '-pix_fmt', 'yuv420p',
                     out_path
                 ]
-                subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=50)
+            except subprocess.TimeoutExpired:
+                return {'statusCode': 500, 'headers': cors_headers, 'body': json.dumps({'error': 'ffmpeg timed out processing images. Constraints exceeded.'})}
             except FileNotFoundError:
                 # Mock response if ffmpeg is missing in local dev/test
                 return {'statusCode': 500, 'headers': cors_headers, 'body': json.dumps({'error': 'ffmpeg executable not found in Lambda environment. A Layer is required.'})}
