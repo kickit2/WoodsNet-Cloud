@@ -84,6 +84,8 @@ const newMuleNameInput = document.getElementById('new-mule-name');
 const newMuleLatInput = document.getElementById('new-mule-lat');
 const newMuleLngInput = document.getElementById('new-mule-lng');
 const saveConfigBtn = document.getElementById('save-config-btn');
+const alertPersonCheckbox = document.getElementById('alert-person');
+const alertBuckCheckbox = document.getElementById('alert-buck');
 
 // Initialize
 const savedTheme = localStorage.getItem('woods_theme') || 'dark';
@@ -219,6 +221,11 @@ async function fetchImages(loadMore = false) {
             cachedImages = data.images || [];
             muleMappings = data.mule_mappings || {};
             muleStatus = data.mule_status || {};
+
+            const prefs = data.notification_prefs || { alert_person: true, alert_buck: true };
+            if (alertPersonCheckbox) alertPersonCheckbox.checked = prefs.alert_person;
+            if (alertBuckCheckbox) alertBuckCheckbox.checked = prefs.alert_buck;
+
             currentNextToken = data.next_token || null;
         }
 
@@ -851,30 +858,39 @@ bulkDownloadBtn.addEventListener('click', () => {
 
 bulkDeleteBtn.addEventListener('click', async () => {
     if (selectedKeys.size === 0) return;
-    if (!confirm(`Are you sure you want to permanently delete ${selectedKeys.size} captures?`)) return;
+    if (!confirm(`Are you sure you want to delete ${selectedKeys.size} captures?`)) return;
 
-    const keysToDelete = Array.from(selectedKeys);
-    bulkDeleteBtn.textContent = 'Deleting...';
-    bulkDeleteBtn.disabled = true;
+    try {
+        bulkDeleteBtn.textContent = "Deleting...";
+        bulkDeleteBtn.disabled = true;
 
-    // MVP looping over single deletes since manage-image only accepts one key currently
-    for (const key of keysToDelete) {
-        try {
-            await fetch(`${API_BASE_URL}/manage-image`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
-                body: JSON.stringify({ action: 'delete', key: key })
-            });
-        } catch (err) {
-            console.error(`Failed to delete ${key}`, err);
-        }
+        const response = await fetch(`${API_BASE_URL}/manage-image`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${AUTH_TOKEN}`
+            },
+            body: JSON.stringify({ action: 'bulk_delete', keys: Array.from(selectedKeys) })
+        });
+
+        if (!response.ok) throw new Error("Bulk delete failed");
+
+        // Refresh UI
+        selectedKeys.clear();
+        isSelectMode = false;
+        toggleSelectModeBtn.textContent = 'Select Items';
+        bulkActions.classList.add('hidden');
+        fetchImages(false);
+    } catch (err) {
+        alert("Failed to delete images.");
+        console.error(err);
+    } finally {
+        bulkDeleteBtn.textContent = "Delete";
+        bulkDeleteBtn.disabled = false;
     }
-
-    bulkDeleteBtn.textContent = 'Delete';
-    bulkDeleteBtn.disabled = false;
-    toggleSelectModeBtn.click(); // Exit mode
-    fetchImages(); // Refresh
 });
+
+
 
 generateTimelapseBtn.addEventListener('click', async () => {
     // Only allow if we have active mules
@@ -1028,7 +1044,7 @@ saveConfigBtn.addEventListener('click', async () => {
     saveConfigBtn.disabled = true;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/manage-image`, {
+        const p1 = fetch(`${API_BASE_URL}/manage-image`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1037,7 +1053,26 @@ saveConfigBtn.addEventListener('click', async () => {
             body: JSON.stringify({ action: 'save_mappings', mappings: muleMappings })
         });
 
-        if (!response.ok) throw new Error("Save failed");
+        let prefsPayload = null;
+        if (alertPersonCheckbox && alertBuckCheckbox) {
+            prefsPayload = {
+                alert_person: alertPersonCheckbox.checked,
+                alert_buck: alertBuckCheckbox.checked
+            };
+        }
+
+        const p2 = prefsPayload ? fetch(`${API_BASE_URL}/manage-image`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${AUTH_TOKEN}`
+            },
+            body: JSON.stringify({ action: 'save_notification_prefs', prefs: prefsPayload })
+        }) : Promise.resolve({ ok: true });
+
+        const [res1, res2] = await Promise.all([p1, p2]);
+
+        if (!res1.ok || !res2.ok) throw new Error("Save failed");
 
         closeConfigBtn.click();
         applySortAndRender(); // Re-render gallery with new names

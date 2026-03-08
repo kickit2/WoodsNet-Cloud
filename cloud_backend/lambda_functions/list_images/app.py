@@ -168,6 +168,21 @@ def lambda_handler(event, context):
 
         next_token = response.get('NextContinuationToken')
 
+        # Fetch Notification Prefs from DynamoDB
+        notification_prefs = {'alert_person': True, 'alert_buck': True}
+        try:
+            dynamodb = boto3.client('dynamodb')
+            prefs_response = dynamodb.get_item(
+                TableName='WoodsNetNotificationPrefs',
+                Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}}
+            )
+            if 'Item' in prefs_response:
+                item = prefs_response['Item']
+                notification_prefs['alert_person'] = item.get('AlertOnPerson', {}).get('BOOL', True)
+                notification_prefs['alert_buck'] = item.get('AlertOnBuck', {}).get('BOOL', True)
+        except Exception as e:
+            print(f"Error fetching notification prefs: {e}")
+
         return {
             'statusCode': 200,
             'headers': {
@@ -176,7 +191,7 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Headers': 'Authorization'
             },
-            'body': json.dumps({'images': images, 'mule_mappings': mule_mappings, 'mule_status': mule_status, 'next_token': next_token})
+            'body': json.dumps({'images': images, 'mule_mappings': mule_mappings, 'mule_status': mule_status, 'notification_prefs': notification_prefs, 'next_token': next_token})
         }
 
     except ClientError as e:

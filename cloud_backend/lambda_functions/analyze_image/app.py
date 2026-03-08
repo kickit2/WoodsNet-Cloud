@@ -199,21 +199,48 @@ def lambda_handler(event, context):
             
             # Trigger SNS Alerts for high-priority subjects
             sns_topic_arn = os.environ.get('SNS_TOPIC_ARN')
-            if sns_topic_arn and (has_person or has_buck):
-                subject = "🚨 trespasser Alert" if has_person else "🦌 Target Alert"
-                msg_body = f"Woods-Net AI detected: {'PERSON' if has_person else 'ANTLERED BUCK'}\n"
-                msg_body += f"Camera ID: {mule_id or 'Unknown'}\n"
-                msg_body += f"File: {key}\n"
-                
+            if sns_topic_arn:
+                # Check Notification Preferences
+                prefs_table = 'WoodsNetNotificationPrefs'
                 try:
-                    sns_client.publish(
-                        TopicArn=sns_topic_arn,
-                        Message=msg_body,
-                        Subject=subject
+                    prefs_response = dynamodb.get_item(
+                        TableName=prefs_table,
+                        Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}}
                     )
-                    print(f"SNS Alert Published for {key}")
+                    prefs = prefs_response.get('Item', {})
+                    alert_person = prefs.get('AlertOnPerson', {'BOOL': True}).get('BOOL', True)
+                    alert_buck = prefs.get('AlertOnBuck', {'BOOL': True}).get('BOOL', True)
                 except Exception as e:
-                    print(f"Failed to publish SNS alert: {e}")
+                    print(f"Error reading prefs: {e}")
+                    alert_person = True
+                    alert_buck = True
+                    
+                should_alert = False
+                subject = ""
+                msg_body = ""
+                
+                if has_person and alert_person:
+                    should_alert = True
+                    subject = "🚨 Trespasser Alert"
+                    msg_body = "Woods-Net AI detected: PERSON\n"
+                elif has_buck and alert_buck:
+                    should_alert = True
+                    subject = "🦌 Target Alert"
+                    msg_body = "Woods-Net AI detected: ANTLERED BUCK\n"
+                
+                if should_alert:
+                    msg_body += f"Camera ID: {mule_id or 'Unknown'}\n"
+                    msg_body += f"File: {key}\n"
+                    
+                    try:
+                        sns_client.publish(
+                            TopicArn=sns_topic_arn,
+                            Message=msg_body,
+                            Subject=subject
+                        )
+                        print(f"SNS Alert Published for {key}")
+                    except Exception as e:
+                        print(f"Failed to publish SNS alert: {e}")
             
     except Exception as e:
         print(f"Error processing S3 Event: {e}")

@@ -63,6 +63,12 @@ def lambda_handler(event, context):
             'headers': cors_headers,
             'body': json.dumps({'error': 'Missing required fields: key'})
         }
+    if action == 'bulk_delete' and not body.get('keys'):
+        return {
+            'statusCode': 400,
+            'headers': cors_headers,
+            'body': json.dumps({'error': 'Missing required fields: keys'})
+        }
         
     bucket_name = os.environ.get('UPLOAD_BUCKET_NAME')
     if not bucket_name:
@@ -73,15 +79,16 @@ def lambda_handler(event, context):
         }
 
     # Ensure key is decoded properly in case the frontend sent an encoded URI
-    key = urllib.parse.unquote(key)
-    
-    # Basic Input Sanitization (Path Traversal Protection)
-    if '..' in key:
-        return {
-            'statusCode': 400,
-            'headers': cors_headers,
-            'body': json.dumps({'error': 'Invalid key format: path traversal detected.'})
-        }
+    if key:
+        key = urllib.parse.unquote(key)
+        
+        # Basic Input Sanitization (Path Traversal Protection)
+        if '..' in key:
+            return {
+                'statusCode': 400,
+                'headers': cors_headers,
+                'body': json.dumps({'error': 'Invalid key format: path traversal detected.'})
+            }
 
     try:
         if action == 'delete':
@@ -92,6 +99,71 @@ def lambda_handler(event, context):
                 'headers': cors_headers,
                 'body': json.dumps({'message': f'Successfully deleted {key}'})
             }
+            
+        elif action == 'bulk_delete':
+            keys = body.get('keys', [])
+            if not isinstance(keys, list):
+                return {
+                    'statusCode': 400,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': 'Invalid format: keys must be a list'})
+                }
+            
+            # Sanitize keys
+            for k in keys:
+                decoded_k = urllib.parse.unquote(k)
+                if '..' in decoded_k:
+                    return {
+                        'statusCode': 400,
+                        'headers': cors_headers,
+                        'body': json.dumps({'error': 'Invalid key format: path traversal detected.'})
+                    }
+                    
+            print(f"Bulk deleting {len(keys)} objects")
+            
+            # S3 delete_objects takes up to 1000 items at a time
+            objects_to_delete = [{'Key': urllib.parse.unquote(k)} for k in keys]
+            
+            for i in range(0, len(objects_to_delete), 1000):
+                chunk = objects_to_delete[i:i + 1000]
+                s3_client.delete_objects(
+                    Bucket=bucket_name,
+                    Delete={
+                        'Objects': chunk,
+                        'Quiet': True
+                    }
+                )
+                
+            return {
+                'statusCode': 200,
+                'headers': cors_headers,
+                'body': json.dumps({'message': f'Successfully deleted {len(keys)} objects'})
+            }
+            
+        elif action == 'save_notification_prefs':
+            prefs = body.get('prefs', {})
+            try:
+                dynamodb = boto3.client('dynamodb')
+                dynamodb.put_item(
+                    TableName='WoodsNetNotificationPrefs',
+                    Item={
+                        'ConfigKey': {'S': 'GLOBAL_PREFS'},
+                        'AlertOnPerson': {'BOOL': bool(prefs.get('alert_person', True))},
+                        'AlertOnBuck': {'BOOL': bool(prefs.get('alert_buck', True))}
+                    }
+                )
+                return {
+                    'statusCode': 200,
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': 'Successfully saved notification preferences.'})
+                }
+            except Exception as e:
+                print(f"Error saving to DynamoDB: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': 'Failed to save preferences to DynamoDB.'})
+                }
             
         elif action == 'rename':
             new_key = body.get('new_key')

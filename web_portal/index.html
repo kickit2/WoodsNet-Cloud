@@ -60,6 +60,21 @@
                     <button id="add-mapping-btn" class="btn-outline" style="flex: 1;">Add Pin</button>
                 </div>
             </div>
+
+            <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+            <h3 style="margin-top: 0; font-size: 1.1rem; margin-bottom: 0.25rem;">Notification Alerts</h3>
+            <p style="margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">Select which AI detections
+                should trigger SMS alerts.</p>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="alert-person" checked>
+                    <span>Alert on People (Trespassers / Hunters)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="alert-buck" checked>
+                    <span>Alert on Target Bucks (Antlered)</span>
+                </label>
+            </div>
             <div style="display:flex; gap:1rem; margin-top:2rem;">
                 <button id="save-config-btn" style="flex:1;">Save to Cloud</button>
                 <button id="close-config-btn" class="btn-outline" style="flex:1;">Cancel</button>
