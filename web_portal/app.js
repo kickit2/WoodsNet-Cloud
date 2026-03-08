@@ -73,6 +73,7 @@ const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
 const startDateInput = document.getElementById('start-date');
 const endDateInput = document.getElementById('end-date');
 const aiFilterSelect = document.getElementById('ai-filter');
+const aiSearchInput = document.getElementById('ai-search');
 
 const configOverlay = document.getElementById('config-overlay');
 const configBtn = document.getElementById('config-btn');
@@ -254,6 +255,8 @@ function applySortAndRender() {
     const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
     let endDate = endDateInput.value ? new Date(endDateInput.value) : null;
     const aiFilter = aiFilterSelect ? aiFilterSelect.value : 'all';
+    const tagSearchText = aiSearchInput ? aiSearchInput.value.toLowerCase().trim() : '';
+    const searchTags = tagSearchText ? tagSearchText.split(',').map(s => s.trim()).filter(s => s) : [];
 
     if (endDate) {
         endDate.setHours(23, 59, 59, 999);
@@ -264,6 +267,14 @@ function applySortAndRender() {
         const imgDate = new Date(img.timestamp);
         if (startDate && imgDate < startDate) return false;
         if (endDate && imgDate > endDate) return false;
+
+        if (searchTags.length > 0) {
+            if (!img.ai_data || !img.ai_data.tags) return false;
+            const imgTags = Object.keys(img.ai_data.tags).map(t => t.toLowerCase());
+            // AND logic: every search tag must match at least one imgTag
+            const matchesAll = searchTags.every(searchTag => imgTags.some(t => t.includes(searchTag)));
+            if (!matchesAll) return false;
+        }
 
         if (aiFilter === 'animals') {
             if (!img.ai_data || !img.ai_data.has_animals) return false;
@@ -560,7 +571,8 @@ function renderGallery(images) {
             else if (tLower.includes('person') || tLower.includes('human')) icon = '🚶 ';
             else if (tLower.includes('vehicle') || tLower.includes('car') || tLower.includes('truck') || tLower.includes('atv')) icon = '🚙 ';
 
-            aiBadgesHtml += `<span class="badge-tag">${icon}${tag} (${count})</span>`;
+            // Use window.searchTag global function to allow auto-labeling filter
+            aiBadgesHtml += `<span class="badge-tag" style="cursor: pointer;" onclick="searchTag('${tag}')" title="Search this tag">${icon}${tag} (${count})</span>`;
         }
 
         // Add Weather Badges if available
@@ -682,6 +694,27 @@ sortSelect.addEventListener('change', applySortAndRender);
 startDateInput.addEventListener('change', applySortAndRender);
 endDateInput.addEventListener('change', applySortAndRender);
 if (aiFilterSelect) aiFilterSelect.addEventListener('change', applySortAndRender);
+
+if (aiSearchInput) {
+    aiSearchInput.addEventListener('input', () => {
+        if (window.searchTimeout) clearTimeout(window.searchTimeout);
+        window.searchTimeout = setTimeout(applySortAndRender, 300);
+    });
+}
+
+window.searchTag = function (tagStr) {
+    if (!aiSearchInput) return;
+    let currentVal = aiSearchInput.value.trim();
+    let cleanTag = tagStr.replace(/^[^\w\s]+/, '').trim();
+
+    if (!currentVal) {
+        aiSearchInput.value = cleanTag;
+    } else if (!currentVal.toLowerCase().includes(cleanTag.toLowerCase())) {
+        aiSearchInput.value = currentVal + ', ' + cleanTag;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    applySortAndRender();
+};
 
 dashboardBtn.addEventListener('click', () => {
     analyticsDashboard.classList.toggle('hidden');
@@ -1092,7 +1125,9 @@ function renderMap(images) {
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(mainMap);
-        mainMarkerLayer = L.featureGroup().addTo(mainMap);
+        mainMarkerLayer = L.markerClusterGroup({
+            maxClusterRadius: 50,
+        }).addTo(mainMap);
     }
 
     mainMarkerLayer.clearLayers();
@@ -1130,13 +1165,19 @@ function renderMap(images) {
             else if (stats.bucks > 0) color = '#f59e0b';
             else if (stats.count > 10) color = '#10b981';
 
-            const marker = L.circleMarker([loc.lat, loc.lng], {
-                radius: Math.min(10 + (stats.count * 0.5), 30),
-                fillColor: color,
-                color: '#fff',
-                weight: 2,
-                fillOpacity: 0.7
+            const iconHtml = `
+                <div style="background-color: ${color}; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; border: 2px solid #fff; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                    <div style="transform: rotate(45deg); color: white; font-size: 11px; font-weight: 600;">${stats.count}</div>
+                </div>
+            `;
+            const customIcon = L.divIcon({
+                html: iconHtml,
+                className: '',
+                iconSize: [30, 30],
+                iconAnchor: [15, 30],
+                popupAnchor: [0, -30]
             });
+            const marker = L.marker([loc.lat, loc.lng], { icon: customIcon });
 
             const popupContent = `
                 <div style="text-align: center; min-width: 150px;">

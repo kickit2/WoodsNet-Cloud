@@ -15,6 +15,9 @@
     <!-- Leaflet for Interactive Maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
 </head>
 
 <body>
@@ -215,7 +218,11 @@
                         <input type="date" id="end-date" class="sort-dropdown" title="End Date">
                     </div>
 
-                    <label for="ai-filter" class="sort-label">AI Filter:</label>
+                    <label for="ai-search" class="sort-label">Tags:</label>
+                    <input type="text" id="ai-search" class="sort-dropdown" placeholder="e.g. buck, bird"
+                        style="width: 140px;">
+
+                    <label for="ai-filter" class="sort-label">Preset:</label>
                     <select id="ai-filter" class="sort-dropdown">
                         <option value="all">All Images</option>
                         <option value="animals">Animals Only</option>
