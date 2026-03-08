@@ -1,0 +1,10 @@
+import serial, time
+s = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+s.write(b'\nINNER_EOF\nINNER_EOF\n\x04\x04\x03\x03\n\n')
+time.sleep(1)
+s.write(b'sudo rfkill unblock all\n')
+time.sleep(1)
+s.write(b'sudo systemctl restart wpa_supplicant\n')
+time.sleep(1)
+s.close()
+print("Mule RF sent")

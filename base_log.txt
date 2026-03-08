@@ -1,0 +1,246 @@
+2026-03-04 21:17:00,049 - INFO - Starting Faux Base Station...
+2026-03-04 21:17:00,050 - INFO - Cleared stale receiver chunks from /received_files/
+2026-03-04 21:17:00,050 - INFO - Binding Command Transceiver: /dev/ttyUSB0
+2026-03-04 21:17:00,052 - WARNING - Dual-Radio degraded! /dev/ttyUSB1 not found. Operating in Single Radio Mode.
+2026-03-04 21:17:00,052 - INFO - Opening XBee on /dev/ttyUSB0...
+2026-03-04 21:17:00,059 - INFO - XBeeSerialPort '/dev/ttyUSB0' port opened
+2026-03-04 21:17:00,084 - INFO - XBee Power Level set to 0 (Low)
+2026-03-04 21:17:00,100 - INFO - XBee RF Data Rate (TR) set to 1 (200 Kbps)
+2026-03-04 21:17:00,103 - INFO - XBee Network Payload (NP) Maximum: 256 bytes
+2026-03-04 21:17:00,104 - INFO - Faux Base listening on /dev/ttyUSB0...
+2026-03-04 21:18:48,404 - INFO - RX PKT: msg_type=HEARTBEAT, src=5, len=2
+2026-03-04 21:18:48,405 - INFO - Heartbeat from Node 5: 2.00V, Status 0x00
+2026-03-04 21:18:48,405 - INFO - [TDM] Fleet Size: 1 | RELAY 5 | Next Wake: 1772758800
+2026-03-04 21:18:48,961 - INFO - Sent SSACK
+2026-03-04 21:18:48,962 - INFO - RX PKT: msg_type=TASK_QUERY, src=5, len=0
+2026-03-04 21:18:48,962 - INFO - Task Query from Node 5
+2026-03-04 21:18:48,962 - INFO - Assigning Task SYNC_TIME to Node 5
+2026-03-04 21:18:48,980 - INFO - Sent TASK_ASSIGN
+2026-03-04 21:18:49,037 - INFO - RX PKT: msg_type=TASK_RESPONSE, src=5, len=4
+2026-03-04 21:18:49,037 - INFO - Task Response from Node 5 for SYNC_TIME [Token: 0x11]: Status 1
+2026-03-04 21:18:49,049 - INFO - RX PKT: msg_type=TASK_QUERY, src=5, len=0
+2026-03-04 21:18:49,050 - INFO - Task Query from Node 5
+2026-03-04 21:18:49,050 - INFO - Assigning Task SET_SCHEDULE to Node 5
+2026-03-04 21:18:49,068 - INFO - Sent TASK_ASSIGN
+2026-03-04 21:18:49,099 - INFO - RX PKT: msg_type=TASK_RESPONSE, src=5, len=4
+2026-03-04 21:18:49,100 - INFO - Task Response from Node 5 for SET_SCHEDULE [Token: 0x15]: Status 0
+2026-03-04 21:18:49,112 - INFO - RX PKT: msg_type=TASK_QUERY, src=5, len=0
+2026-03-04 21:18:49,112 - INFO - Task Query from Node 5
+2026-03-04 21:18:49,112 - INFO - Assigning Task GET_NODE_RSSI to Node 5
+2026-03-04 21:18:49,129 - INFO - Sent TASK_ASSIGN
+2026-03-04 21:18:49,218 - INFO - RX PKT: msg_type=TASK_RESPONSE, src=5, len=5
+2026-03-04 21:18:49,218 - INFO - Task Response from Node 5 for GET_NODE_RSSI [Token: 0x22]: Status 0
+2026-03-04 21:18:49,218 - INFO -   -> Mule reported active RSSI: -42 dBm
+2026-03-04 21:18:49,230 - INFO - RX PKT: msg_type=TASK_QUERY, src=5, len=0
+2026-03-04 21:18:49,230 - INFO - Task Query from Node 5
+2026-03-04 21:18:49,230 - INFO - No Tasks for Node 5. Yielding.
+2026-03-04 21:18:49,248 - INFO - Sent TASK_ASSIGN
+2026-03-04 21:18:49,312 - INFO - RX PKT: msg_type=REQ_XFER, src=5, len=10
+2026-03-04 21:18:49,316 - INFO - Req BLAST [Direct Payload] from Node 5: File 1, Size 19314B, Pkts 83, Rx PL=0, Incoming Mule RSSI: -40 dBm
+2026-03-04 21:18:49,323 - INFO - Dynamically mirroring TX Power Level to PL=0 for active handshake.
+2026-03-04 21:18:49,359 - INFO - Sent APPROVE
+2026-03-04 21:18:49,478 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,503 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,525 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,548 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,569 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,583 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,606 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,628 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,650 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,673 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,696 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,718 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,741 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,763 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,786 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,808 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,831 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,853 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,875 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,898 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,923 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,946 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,968 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:49,991 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,013 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,036 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,058 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,081 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,103 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,126 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,148 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,170 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,193 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,215 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,238 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,261 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,283 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,306 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,328 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,351 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,373 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,396 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,421 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,446 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,469 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,491 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,514 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,536 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,558 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,581 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,603 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,626 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,649 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,671 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,693 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,716 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,738 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,761 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,783 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,806 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,829 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,851 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,877 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,902 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,924 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,947 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,969 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:50,992 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,014 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,037 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,059 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,082 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,104 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,127 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,149 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,172 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,194 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,217 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,239 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,262 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,284 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,307 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,309 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=47
+2026-03-04 21:18:51,325 - INFO - Sent SSACK
+2026-03-04 21:18:51,366 - INFO - RX PKT: msg_type=END_BLAST, src=5, len=3
+2026-03-04 21:18:51,366 - INFO - End Blast for File 1. Verifying CRC...
+2026-03-04 21:18:51,367 - INFO - File transaction successful: received_files/node5_img1.avif (19314 bytes)
+2026-03-04 21:18:51,367 - INFO - Base Station SUCCESS! Received 18.86 KB in 2.05s => Speed: 9.20 KB/s
+2026-03-04 21:18:51,383 - INFO - Sent CONF_XFER
+2026-03-04 21:18:51,440 - INFO - RX PKT: msg_type=REQ_XFER, src=5, len=10
+2026-03-04 21:18:51,445 - INFO - Req BLAST [Direct Payload] from Node 5: File 1, Size 55544B, Pkts 237, Rx PL=0, Incoming Mule RSSI: -40 dBm
+2026-03-04 21:18:51,448 - INFO - Dynamically mirroring TX Power Level to PL=0 for active handshake.
+2026-03-04 21:18:51,512 - INFO - Sent APPROVE
+2026-03-04 21:18:51,625 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,650 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,673 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,695 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,718 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,740 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,763 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,785 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,808 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,831 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,853 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,875 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,898 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,920 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,943 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,965 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:51,988 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,010 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,033 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,058 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,083 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,106 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,129 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,151 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,174 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,197 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,219 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,242 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,264 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,287 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,309 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,332 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,354 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,376 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,399 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,421 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,443 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,466 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,491 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,516 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,539 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,561 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,584 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,606 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,629 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,651 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,674 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,697 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,719 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,742 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,765 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,787 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,810 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,833 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,855 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,877 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,900 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,925 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,947 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,970 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:52,992 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,015 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,038 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,060 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,083 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,106 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,176 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,199 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,222 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,244 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,267 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,290 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,315 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,338 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,360 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,383 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,406 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,428 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,451 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,473 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,496 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,519 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,541 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,564 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,586 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,609 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,631 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,654 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,677 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,699 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,722 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,745 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,770 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,795 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,820 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,845 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,870 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,894 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,920 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,945 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,970 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:53,992 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:54,015 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:54,037 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:54,059 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:54,082 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:18:54,104 - INFO - RX PKT: msg_type=FILE_DATA, src=0, len=238
+2026-03-04 21:19:37,311 - INFO - RX PKT: msg_type=REQ_XFER, src=5, len=10
+2026-03-04 21:19:37,315 - INFO - Req BLAST [Direct Payload] from Node 5: File 1, Size 43303B, Pkts 185, Rx PL=4, Incoming Mule RSSI: -40 dBm
+2026-03-04 21:19:37,320 - INFO - Dynamically mirroring TX Power Level to PL=4 for active handshake.
+2026-03-04 21:19:37,361 - INFO - Sent APPROVE
+2026-03-04 21:21:00,105 - WARNING - Garbage Collecting Stale Session 5!

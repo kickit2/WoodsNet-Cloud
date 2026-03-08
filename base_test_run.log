@@ -1,0 +1,8 @@
+venv/bin/python: can't open file '/home/kickit2/faux_base/serial_killer.py': [Errno 2] No such file or directory
+Traceback (most recent call last):
+  File [35m"/home/kickit2/faux_base/main.py"[0m, line [35m7[0m, in [35m<module>[0m
+    from session_manager import SessionManager
+  File [35m"/home/kickit2/faux_base/session_manager.py"[0m, line [35m8[0m, in [35m<module>[0m
+    from protocol import Packet, PacketType, BaseActions, parse_header, build_header
+[1;35mModuleNotFoundError[0m: [35mNo module named 'protocol'[0m
+Connection to 192.168.2.46 closed.

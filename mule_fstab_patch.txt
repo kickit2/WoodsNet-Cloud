@@ -1,0 +1,1 @@
+tmpfs /home/kickit2/mule_cam_grabs tmpfs nodev,nosuid,size=128M 0 0
