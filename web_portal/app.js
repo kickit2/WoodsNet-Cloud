@@ -1,4 +1,17 @@
-// Configuration
+window.addEventListener('error', function (e) {
+    var errDiv = document.createElement('div');
+    errDiv.style = "padding: 20px; color: red; background: white; z-index: 9999; position: fixed; top: 0; left: 0; right: 0; font-size: 14px; text-align: left; border-bottom: 3px solid red;";
+    errDiv.innerHTML = `<h2>JS Error</h2><p>${e.message}</p><pre>${e.error ? e.error.stack : ''}</pre>`;
+    document.body.appendChild(errDiv);
+});
+window.addEventListener('unhandledrejection', function (e) {
+    var errDiv = document.createElement('div');
+    errDiv.style = "padding: 20px; color: red; background: white; z-index: 9999; position: fixed; top: 0; left: 0; right: 0; font-size: 14px; text-align: left; border-bottom: 3px solid red;";
+    errDiv.innerHTML = `<h2>Promise Error</h2><p>${e.reason}</p>`;
+    document.body.appendChild(errDiv);
+});
+
+// App configuration
 // In production, this URL would be set dynamically. For testing, we mock it.
 let API_BASE_URL = localStorage.getItem('woods_api_url') || '';
 let AUTH_TOKEN = localStorage.getItem('woods_auth_token') || '';
@@ -613,7 +626,7 @@ function renderGallery(images) {
                 else if (m >= 0.75 && m < 1.0) moonIcon = '🌗';
                 else if (m > 0.75 && m < 1.0) moonIcon = '🌘';
 
-                aiBadgesHtml += `<span class="badge-tag" style="background: rgba(24cd, 211, 77, 0.2); color: #fcd34d; border-color: rgba(252, 211, 77, 0.4);">${moonIcon}</span>`;
+                aiBadgesHtml += `<span class="badge-tag" style="background: rgba(252, 211, 77, 0.2); color: #fcd34d; border-color: rgba(252, 211, 77, 0.4);">${moonIcon}</span>`;
             }
         }
 

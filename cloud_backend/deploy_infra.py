@@ -200,9 +200,13 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                 "Action": [
                          "s3:PutObject",
                          "s3:GetObject",
-                         "s3:DeleteObject"
+                         "s3:DeleteObject",
+                         "s3:ListBucket"
                 ],
-                "Resource": f"arn:aws:s3:::{bucket_name}/*"
+                "Resource": [
+                    f"arn:aws:s3:::{bucket_name}/*",
+                    f"arn:aws:s3:::{bucket_name}"
+                ]
             },
             {
                  "Effect": "Allow",
@@ -286,6 +290,11 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                 FunctionName=func_name,
                 ZipFile=zipped_code
             )
+            
+            # Wait for the function update to complete to avoid ResourceConflictException on configuration update
+            waiter = lambda_client.get_waiter('function_updated')
+            waiter.wait(FunctionName=func_name)
+
             lambda_client.update_function_configuration(
                 FunctionName=func_name,
                 Environment={'Variables': env_vars},
@@ -321,10 +330,14 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
             StatementId='s3-invoke-permission',
             Action='lambda:InvokeFunction',
             Principal='s3.amazonaws.com',
-            SourceArn=f"arn:aws:s3:::{bucket_name}"
+            SourceArn=f"arn:aws:s3:::{bucket_name}",
+            SourceAccount=account_id
         )
     except lambda_client.exceptions.ResourceConflictException:
         pass
+
+    print("    -> Waiting 5s for IAM policy propagation...")
+    time.sleep(5)
 
     s3_client.put_bucket_notification_configuration(
         Bucket=bucket_name,
@@ -494,9 +507,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
     # ==========================================
     # 6. Custom Domain (CloudFront + Route53)
     # ==========================================
-    domain = None # Extracted dynamically from kwargs if passed
-    if 'domain' in globals() and globals()['domain']:
-        pass # Handle this cleanly via function parameters. Let's update the signature implicitly.
+    # domain is passed as a function argument
         
     def setup_custom_domain(custom_domain):
         print(f"\n[6] Setting up Custom Domain: {custom_domain}")

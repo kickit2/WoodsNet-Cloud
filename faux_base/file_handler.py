@@ -107,7 +107,7 @@ class FileTransaction:
                 from cloud_uploader import CloudUploader
                 # In a real deployment, this URL would be injected via environment variables or a config file
                 import os
-                api_url = os.environ.get('AWS_API_URL', 'https://REPLACE_WITH_API_ID.execute-api.us-east-1.amazonaws.com/get-upload-url')
+                api_url = os.environ.get('AWS_API_URL', 'https://iwsscp4o5f.execute-api.us-east-1.amazonaws.com/get-upload-url')
                 uploader = CloudUploader(api_url)
                 
                 # Extract filename from path (e.g. node1_img4.avif)
