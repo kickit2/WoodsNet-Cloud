@@ -158,6 +158,24 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
         print("    -> DynamoDB Table already exists.")
 
     # ==========================================
+    # 1.8.6 Create Subscribers DynamoDB Table
+    # ==========================================
+    subs_table_name = 'WoodsNetSubscribers'
+    print(f"\n[1.8.6] Creating DynamoDB Table: {subs_table_name}")
+    try:
+        dynamodb_client.create_table(
+            TableName=subs_table_name,
+            KeySchema=[{'AttributeName': 'SubscriberID', 'KeyType': 'HASH'}],
+            AttributeDefinitions=[{'AttributeName': 'SubscriberID', 'AttributeType': 'S'}],
+            BillingMode='PAY_PER_REQUEST'
+        )
+        print("    -> Waiting for table to be active...")
+        dynamodb_client.get_waiter('table_exists').wait(TableName=subs_table_name)
+        print("    -> DynamoDB Table created.")
+    except dynamodb_client.exceptions.ResourceInUseException:
+        print("    -> DynamoDB Table already exists.")
+
+    # ==========================================
     # 1.9 Create SNS Topic for Security Alerts
     # ==========================================
     topic_name = 'WoodsNetSecurityAlerts'
@@ -227,7 +245,8 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                  "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Scan", "dynamodb:GetItem", "dynamodb:BatchGetItem"],
                  "Resource": [
                      f"arn:aws:dynamodb:{region}:{account_id}:table/{table_name}",
-                     f"arn:aws:dynamodb:{region}:{account_id}:table/WoodsNetNotificationPrefs"
+                     f"arn:aws:dynamodb:{region}:{account_id}:table/WoodsNetNotificationPrefs",
+                     f"arn:aws:dynamodb:{region}:{account_id}:table/WoodsNetSubscribers"
                  ]
              },
              {

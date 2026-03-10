@@ -194,6 +194,7 @@ authForm.addEventListener('submit', async (e) => {
                 if (configPortalNameInput) configPortalNameInput.value = data.portal_name;
             }
 
+            await fetchSubscribers();
             showApp();
             applySortAndRender();
         } else {
@@ -1317,18 +1318,204 @@ addMappingBtn.addEventListener('click', () => {
     }
 });
 
+const addSubscriberBtn = document.getElementById('add-subscriber-btn');
+if (addSubscriberBtn) {
+    addSubscriberBtn.addEventListener('click', () => {
+        // Scrape current DOM state
+        const currentDeps = buildSubscribersPayload();
+
+        // Push a fresh blank subscriber
+        currentDeps.push({
+            id: 'sub-' + Date.now(),
+            name: '',
+            active: true,
+            contact_sms: '',
+            contact_email: '',
+            routing: {}
+        });
+
+        // Re-render the UI matrix
+        renderSubscribers(currentDeps);
+    });
+}
+
+async function fetchSubscribers() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/manage-image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+            body: JSON.stringify({ action: 'get_subscribers' })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            renderSubscribers(data.subscribers || []);
+        }
+    } catch (err) {
+        console.error("Failed to fetch subscribers:", err);
+    }
+}
+
+function renderSubscribers(subscribers) {
+    const container = document.getElementById('subscribers-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    subscribers.forEach(sub => {
+        const subId = sub.id || 'unknown';
+        const card = document.createElement('div');
+        card.className = 'subscriber-card';
+        card.setAttribute('data-sub-id', subId);
+        card.setAttribute('data-sub-name', sub.name || '');
+        card.style.cssText = 'border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; background: rgba(0,0,0,0.1); margin-bottom: 1.5rem;';
+
+        let routingHtml = '';
+        const allCameras = Object.keys(muleMappings).length > 0 ? Object.keys(muleMappings) : Object.keys(sub.routing || {});
+
+        allCameras.forEach(camId => {
+            const camName = (muleMappings[camId] && muleMappings[camId].name) ? muleMappings[camId].name : camId;
+            const activeTags = (sub.routing && sub.routing[camId]) ? sub.routing[camId] : [];
+
+            const buckChecked = activeTags.includes('Antlered Buck') ? 'checked' : '';
+            const peopleChecked = activeTags.includes('Person') ? 'checked' : '';
+
+            routingHtml += `
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-weight: 500;">${camId} (${camName})</div>
+                </div>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                        <input type="checkbox" class="route-checkbox" data-mule="${camId}" data-tag="Person" ${peopleChecked}> People Alerts
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                        <input type="checkbox" class="route-checkbox" data-mule="${camId}" data-tag="Antlered Buck" ${buckChecked}> Buck Alerts
+                    </label>
+                </div>
+            </div>`;
+        });
+
+        if (routingHtml === '') routingHtml = '<div style="color:var(--text-secondary);font-size:0.875rem;">No cameras available for routing.</div>';
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <input type="text" class="sub-name-input" value="${sub.name || ''}" placeholder="Subscriber Name" style="padding: 0.3rem 0.5rem; font-size: 1.1rem; font-weight: bold; border-radius:3px; border:1px solid var(--border); background:rgba(0,0,0,0.2); color:var(--text-main); width: 150px;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                        <input type="checkbox" class="sub-active" ${sub.active ? 'checked' : ''}> Active
+                    </label>
+                </div>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <div style="display:flex; flex-direction:column; gap:0.25rem;">
+                        <span style="font-size:0.75rem;color:var(--text-secondary);">SMS</span>
+                        <input type="text" class="sub-sms-input" value="${sub.contact_sms || ''}" placeholder="+15551234567" style="padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:0.25rem;">
+                         <span style="font-size:0.75rem;color:var(--text-secondary);">Email</span>
+                         <input type="email" class="sub-email-input" value="${sub.contact_email || ''}" placeholder="jeff@email.com" style="padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                      <button class="btn-outline macro-select-deer" style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem;">Select all - Deer</button>
+                      <button class="btn-outline macro-select-people" style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem;">Select all - People</button>
+                      <button class="btn-outline macro-clear-all" style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem; color: var(--error); border-color: rgba(239, 68, 68, 0.3);">Clear all</button>
+                 </div>
+                 ${routingHtml}
+            </div>
+        `;
+        container.appendChild(card);
+    });
+    bindLocalMacros();
+}
+
+function bindLocalMacros() {
+    document.querySelectorAll('.macro-select-deer').forEach(btn => {
+        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.parentElement.parentElement.querySelectorAll('.route-checkbox[data-tag="Antlered Buck"]')).forEach(chk => chk.checked = true); };
+    });
+    document.querySelectorAll('.macro-select-people').forEach(btn => {
+        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.parentElement.parentElement.querySelectorAll('.route-checkbox[data-tag="Person"]')).forEach(chk => chk.checked = true); };
+    });
+    document.querySelectorAll('.macro-clear-all').forEach(btn => {
+        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.parentElement.parentElement.querySelectorAll('.route-checkbox')).forEach(chk => chk.checked = false); };
+    });
+}
+
+function buildSubscribersPayload() {
+    const payload = [];
+    document.querySelectorAll('.subscriber-card').forEach(card => {
+        const id = card.getAttribute('data-sub-id');
+        const nameInput = card.querySelector('.sub-name-input');
+        const name = nameInput ? nameInput.value.trim() : (card.getAttribute('data-sub-name') || 'Unknown User');
+
+        const activeCheckbox = card.querySelector('.sub-active');
+        const isActive = activeCheckbox ? activeCheckbox.checked : true;
+
+        const smsInput = card.querySelector('.sub-sms-input');
+        const emailInput = card.querySelector('.sub-email-input');
+
+        const sms = smsInput ? smsInput.value.trim() : "";
+        const email = emailInput ? emailInput.value.trim() : "";
+
+        const routing = {};
+
+        // Find all checked tag inputs within this specific subscriber card
+        const checkedRoutes = card.querySelectorAll('.route-checkbox:checked');
+        checkedRoutes.forEach(chk => {
+            const muleId = chk.getAttribute('data-mule');
+            const tag = chk.getAttribute('data-tag');
+
+            if (!routing[muleId]) {
+                routing[muleId] = [];
+            }
+            if (tag) {
+                routing[muleId].push(tag);
+            }
+        });
+
+        payload.push({
+            id: id,
+            name: name,
+            active: isActive,
+            contact_sms: sms,
+            contact_email: email,
+            routing: routing
+        });
+    });
+    return payload;
+}
+
 const saveAlertsBtn = document.getElementById('save-alerts-btn');
 if (saveAlertsBtn) {
-    saveAlertsBtn.addEventListener('click', () => {
+    saveAlertsBtn.addEventListener('click', async () => {
         saveAlertsBtn.textContent = "Saving...";
         saveAlertsBtn.disabled = true;
 
-        // Artificial delay mocking Phase 2 DB sync
-        setTimeout(() => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/manage-image`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${AUTH_TOKEN}`
+                },
+                body: JSON.stringify({
+                    action: 'save_alert_settings',
+                    subscribers: buildSubscribersPayload()
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}`);
+            }
+
+            alert("Alert settings successfully saved to the cloud!");
+        } catch (error) {
+            console.error("Error saving alerts:", error);
+            alert("Failed to save alert settings. Please check your connection.");
+        } finally {
             saveAlertsBtn.textContent = "Save Alert Settings";
             saveAlertsBtn.disabled = false;
-            alert("Alert settings successfully saved!");
-        }, 500);
+        }
     });
 }
 

@@ -179,6 +179,80 @@ def lambda_handler(event, context):
                     'body': json.dumps({'error': 'Failed to save preferences to DynamoDB.'})
                 }
                 
+        elif action == 'get_subscribers':
+            try:
+                dynamodb = boto3.client('dynamodb')
+                response = dynamodb.scan(TableName='WoodsNetSubscribers')
+                
+                subscribers = []
+                for item in response.get('Items', []):
+                    # Unpack DynamoDB Map syntax
+                    contact = item.get('ContactMethods', {}).get('M', {})
+                    raw_routing = item.get('RoutingMatrix', {}).get('M', {})
+                    
+                    routing = {}
+                    for cam_id, tag_list in raw_routing.items():
+                        routing[cam_id] = [t.get('S') for t in tag_list.get('L', [])]
+                        
+                    subscribers.append({
+                        'id': item.get('SubscriberID', {}).get('S', ''),
+                        'name': item.get('Name', {}).get('S', ''),
+                        'active': item.get('IsActive', {}).get('BOOL', True),
+                        'contact_sms': contact.get('sms', {}).get('S', ''),
+                        'contact_email': contact.get('email', {}).get('S', ''),
+                        'routing': routing
+                    })
+                    
+                return {
+                    'statusCode': 200,
+                    'headers': cors_headers,
+                    'body': json.dumps({'subscribers': subscribers})
+                }
+            except Exception as e:
+                print(f"Error fetching subscribers: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': str(e)})
+                }
+                
+        elif action == 'save_alert_settings':
+            subscribers = body.get('subscribers', [])
+            try:
+                dynamodb = boto3.client('dynamodb')
+                for sub in subscribers:
+                    
+                    # Convert JS routing dict (MuleID -> [Tags]) to DynamoDB Map type
+                    routing_map = {}
+                    for mule_id, tags in sub.get('routing', {}).items():
+                        routing_map[mule_id] = {'L': [{'S': t} for t in tags]}
+                    
+                    dynamodb.put_item(
+                        TableName='WoodsNetSubscribers',
+                        Item={
+                            'SubscriberID': {'S': str(sub.get('id', 'unknown'))},
+                            'Name': {'S': str(sub.get('name', ''))},
+                            'IsActive': {'BOOL': bool(sub.get('active', True))},
+                            'ContactMethods': {'M': {
+                                'sms': {'S': str(sub.get('contact_sms', ''))},
+                                'email': {'S': str(sub.get('contact_email', ''))}
+                            }},
+                            'RoutingMatrix': {'M': routing_map}
+                        }
+                    )
+                return {
+                    'statusCode': 200,
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': f'Successfully synced {len(subscribers)} alert subscriptions.'})
+                }
+            except Exception as e:
+                print(f"Error saving alert settings to DynamoDB: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': str(e)})
+                }
+                
         elif action == 'save_portal_config':
             portal_name = body.get('portal_name')
             portal_password = body.get('portal_password')
