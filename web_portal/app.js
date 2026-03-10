@@ -541,6 +541,7 @@ function renderGallery(images) {
     updateStats(images.length, uniqueMules.size);
 
     const docFrag = document.createDocumentFragment();
+    galleryGrid.innerHTML = ''; // Clear previous images before re-rendering
 
     images.forEach(img => {
         const card = document.createElement('div');
