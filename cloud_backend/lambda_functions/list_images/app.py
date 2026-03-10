@@ -37,9 +37,12 @@ def lambda_handler(event, context):
             }
 
         s3_client = boto3.client('s3')
+        images = []
+        next_token = None
+        mule_mappings = {}
+        mule_status = {}
         
         # Fetch Mule Name Mappings
-        mule_mappings = {}
         try:
             mapping_obj = s3_client.get_object(Bucket=bucket_name, Key='_config/mule_mappings.json')
             mule_mappings = json.loads(mapping_obj['Body'].read().decode('utf-8'))
@@ -102,7 +105,6 @@ def lambda_handler(event, context):
                     
             # Fetch Mule Hardware States from DynamoDB
             unique_mules = list(set([obj['Key'].split('/')[2] for obj in response.get('Contents', []) if len(obj['Key'].split('/')) >= 3 and not obj['Key'].endswith('/')]))
-            mule_status = {}
             if unique_mules:
                 dynamodb = boto3.client('dynamodb')
                 table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
@@ -163,7 +165,7 @@ def lambda_handler(event, context):
                     # Removing the tzinfo for simplicity in the frontend
                     'timestamp': obj['LastModified'].replace(tzinfo=None).isoformat() + "Z", 
                     'url': presigned_url,
-                    'ai_data': ai_tags_map.get(key, {'has_animals': False, 'tags': {}, 'weather': None})
+                    'ai_data': ai_tags_map.get(key, {'has_animals': False, 'tags': {}, 'weather': None, 'awaiting_id': True})
                 })
 
         next_token = response.get('NextContinuationToken')

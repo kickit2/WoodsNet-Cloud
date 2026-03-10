@@ -278,8 +278,10 @@ function applySortAndRender() {
 
         if (aiFilter === 'animals') {
             if (!img.ai_data || !img.ai_data.has_animals) return false;
+        } else if (aiFilter === 'awaiting') {
+            if (!img.ai_data || !img.ai_data.awaiting_id) return false;
         } else if (aiFilter === 'empty') {
-            if (img.ai_data && img.ai_data.has_animals) return false;
+            if (!img.ai_data || img.ai_data.has_animals || img.ai_data.awaiting_id) return false;
         } else if (aiFilter === 'deer') {
             if (!img.ai_data || !img.ai_data.tags) return false;
             const tags = Object.keys(img.ai_data.tags);
@@ -338,13 +340,14 @@ function renderCharts(images) {
     images.forEach(img => {
         const dateStr = new Date(img.timestamp).toISOString().split('T')[0];
         if (!dateCounts[dateStr]) {
-            dateCounts[dateStr] = { person: 0, buck: 0, doe: 0, other: 0, empty: 0 };
+            dateCounts[dateStr] = { person: 0, buck: 0, doe: 0, other: 0, empty: 0, awaiting: 0 };
         }
 
         let hasPerson = false;
         let hasBuck = false;
         let hasDoe = false;
         let hasOther = false;
+        let isAwaiting = img.ai_data && img.ai_data.awaiting_id === true;
 
         if (img.ai_data && img.ai_data.tags) {
             for (const key of Object.keys(img.ai_data.tags)) {
@@ -355,7 +358,8 @@ function renderCharts(images) {
             }
         }
 
-        if (hasPerson) dateCounts[dateStr].person++;
+        if (isAwaiting) dateCounts[dateStr].awaiting++;
+        else if (hasPerson) dateCounts[dateStr].person++;
         else if (hasBuck) dateCounts[dateStr].buck++;
         else if (hasDoe) dateCounts[dateStr].doe++;
         else if (hasOther || (img.ai_data && img.ai_data.has_animals)) dateCounts[dateStr].other++;
@@ -371,6 +375,7 @@ function renderCharts(images) {
     const doeData = sortedDates.map(d => dateCounts[d].doe);
     const otherData = sortedDates.map(d => dateCounts[d].other);
     const emptyData = sortedDates.map(d => dateCounts[d].empty);
+    const awaitingData = sortedDates.map(d => dateCounts[d].awaiting);
 
     const ctxActivity = document.getElementById('activityChart').getContext('2d');
     activityChartInstance = new Chart(ctxActivity, {
@@ -378,11 +383,12 @@ function renderCharts(images) {
         data: {
             labels: sortedDates,
             datasets: [
-                { label: 'People / Hunters', data: personData, backgroundColor: '#ef4444' },
-                { label: 'Antlered Bucks', data: buckData, backgroundColor: '#f59e0b' },
-                { label: 'Does / Young', data: doeData, backgroundColor: '#3b82f6' },
-                { label: 'Other Wildlife', data: otherData, backgroundColor: '#10b981' },
-                { label: 'Empty (No Animal)', data: emptyData, backgroundColor: '#64748b' }
+                { label: 'Awaiting ID', data: awaitingData, backgroundColor: '#facc15' },
+                { label: 'People / Hunters', data: personData, backgroundColor: '#f97316' },
+                { label: 'Antlered Bucks', data: buckData, backgroundColor: '#ef4444' },
+                { label: 'Does / Young', data: doeData, backgroundColor: '#f472b6' },
+                { label: 'Other Wildlife', data: otherData, backgroundColor: '#38bdf8' },
+                { label: 'Empty (No Animal)', data: emptyData, backgroundColor: '#94a3b8' }
             ]
         },
         options: {
@@ -562,18 +568,26 @@ function renderGallery(images) {
 
         const aiTags = img.ai_data && img.ai_data.tags ? img.ai_data.tags : {};
         let aiBadgesHtml = '';
-        for (const [tag, count] of Object.entries(aiTags)) {
-            let icon = '';
-            const tLower = tag.toLowerCase();
-            if (tLower.includes('deer') || tLower.includes('buck') || tLower.includes('doe')) icon = '🦌 ';
-            else if (tLower.includes('raccoon')) icon = '🦝 ';
-            else if (tLower.includes('bear')) icon = '🐻 ';
-            else if (tLower.includes('bird') || tLower.includes('turkey')) icon = '🦃 ';
-            else if (tLower.includes('person') || tLower.includes('human')) icon = '🚶 ';
-            else if (tLower.includes('vehicle') || tLower.includes('car') || tLower.includes('truck') || tLower.includes('atv')) icon = '🚙 ';
 
-            // Use window.searchTag global function to allow auto-labeling filter
-            aiBadgesHtml += `<span class="badge-tag" style="cursor: pointer;" onclick="searchTag('${tag}')" title="Search this tag">${icon}${tag} (${count})</span>`;
+        if (img.ai_data && img.ai_data.awaiting_id === true) {
+            aiBadgesHtml += `<span class="badge-tag" style="background: rgba(250, 204, 21, 0.2); color: #facc15; border-color: rgba(250, 204, 21, 0.4);" title="Image has not been analyzed yet">⏳ Awaiting ID</span>`;
+        } else {
+            for (const [tag, count] of Object.entries(aiTags)) {
+                let icon = '';
+                const tLower = tag.toLowerCase();
+                if (tLower.includes('deer') || tLower.includes('buck') || tLower.includes('doe')) icon = '🦌 ';
+                else if (tLower.includes('raccoon')) icon = '🦝 ';
+                else if (tLower.includes('bear')) icon = '🐻 ';
+                else if (tLower.includes('bird') || tLower.includes('turkey')) icon = '🦃 ';
+                else if (tLower.includes('person') || tLower.includes('human')) icon = '🚶 ';
+                else if (tLower.includes('vehicle') || tLower.includes('car') || tLower.includes('truck') || tLower.includes('atv')) icon = '🚙 ';
+
+                // Use window.searchTag global function to allow auto-labeling filter
+                aiBadgesHtml += `<span class="badge-tag" style="cursor: pointer;" onclick="searchTag('${tag}')" title="Search this tag">${icon}${tag} (${count})</span>`;
+            }
+            if (Object.keys(aiTags).length === 0 && (!img.ai_data || !img.ai_data.has_animals)) {
+                aiBadgesHtml += `<span class="badge-tag" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8; border-color: rgba(148, 163, 184, 0.4);" title="No wildlife detected">∅ Empty</span>`;
+            }
         }
 
         // Add Weather Badges if available
