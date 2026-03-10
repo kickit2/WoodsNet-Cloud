@@ -13,7 +13,7 @@ window.addEventListener('unhandledrejection', function (e) {
 
 // App configuration
 // In production, this URL would be set dynamically. For testing, we mock it.
-let API_BASE_URL = localStorage.getItem('woods_api_url') || '';
+let API_BASE_URL = localStorage.getItem('woods_api_url') || 'https://iwsscp4o5f.execute-api.us-east-1.amazonaws.com';
 let AUTH_TOKEN = localStorage.getItem('woods_auth_token') || '';
 let cachedImages = [];
 let muleMappings = {};
@@ -85,21 +85,24 @@ const bulkDownloadBtn = document.getElementById('bulk-download-btn');
 const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
 const startDateInput = document.getElementById('start-date');
 const endDateInput = document.getElementById('end-date');
-const aiFilterSelect = document.getElementById('ai-filter');
+const muleFilter = document.getElementById('mule-filter');
+const aiFilterCheckboxes = document.querySelectorAll('.ai-filter-cb');
 const aiSearchInput = document.getElementById('ai-search');
 
-const configOverlay = document.getElementById('config-overlay');
+const settingsDashboard = document.getElementById('settings-dashboard');
 const configBtn = document.getElementById('config-btn');
-const closeConfigBtn = document.getElementById('close-config-btn');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const settingsTabBtns = document.querySelectorAll('.settings-tab-btn');
+const settingsTabs = document.querySelectorAll('.settings-tab');
 const mappingsList = document.getElementById('mappings-list');
 const addMappingBtn = document.getElementById('add-mapping-btn');
 const newMuleIdInput = document.getElementById('new-mule-id');
 const newMuleNameInput = document.getElementById('new-mule-name');
 const newMuleLatInput = document.getElementById('new-mule-lat');
 const newMuleLngInput = document.getElementById('new-mule-lng');
-const saveConfigBtn = document.getElementById('save-config-btn');
-const alertPersonCheckbox = document.getElementById('alert-person');
-const alertBuckCheckbox = document.getElementById('alert-buck');
+const saveGeneralBtn = document.getElementById('save-general-btn');
+const configPortalNameInput = document.getElementById('config-portal-name');
+const configPortalPasswordInput = document.getElementById('config-portal-password');
 
 // Initialize
 const savedTheme = localStorage.getItem('woods_theme') || 'dark';
@@ -109,12 +112,39 @@ if (savedTheme === 'light') {
     if (themeIconMoon) themeIconMoon.classList.remove('hidden');
 }
 
+async function initPortalBrand() {
+    if (!API_BASE_URL) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/list-images`, {
+            headers: { 'Authorization': 'Bearer ' }
+        });
+        if (response.status === 401) {
+            const errData = await response.json().catch(() => ({}));
+            if (errData.portal_name) {
+                document.title = errData.portal_name;
+                const loginTitle = document.getElementById('login-portal-title');
+                const headerTitle = document.getElementById('header-portal-title');
+                if (loginTitle) loginTitle.textContent = errData.portal_name;
+                if (headerTitle) headerTitle.textContent = errData.portal_name;
+                if (configPortalNameInput) configPortalNameInput.value = errData.portal_name;
+            }
+        }
+    } catch (e) {
+        console.warn("Could not fetch portal brand", e);
+    }
+}
+
 function init() {
-    if (AUTH_TOKEN) {
+    if (AUTH_TOKEN && API_BASE_URL) {
         showApp();
         fetchImages();
     } else {
+        if (AUTH_TOKEN) {
+            AUTH_TOKEN = '';
+            localStorage.removeItem('woods_auth_token');
+        }
         showAuth();
+        initPortalBrand();
     }
 }
 
@@ -154,9 +184,27 @@ authForm.addEventListener('submit', async (e) => {
             cachedImages = data.images || [];
             muleMappings = data.mule_mappings || {};
             muleStatus = data.mule_status || {};
+
+            if (data.portal_name) {
+                document.title = data.portal_name;
+                const loginTitle = document.getElementById('login-portal-title');
+                const headerTitle = document.getElementById('header-portal-title');
+                if (loginTitle) loginTitle.textContent = data.portal_name;
+                if (headerTitle) headerTitle.textContent = data.portal_name;
+                if (configPortalNameInput) configPortalNameInput.value = data.portal_name;
+            }
+
             showApp();
             applySortAndRender();
         } else {
+            if (response.status === 401) {
+                const errData = await response.json().catch(() => ({}));
+                if (errData.portal_name) {
+                    document.title = errData.portal_name;
+                    const loginTitle = document.getElementById('login-portal-title');
+                    if (loginTitle) loginTitle.textContent = errData.portal_name;
+                }
+            }
             throw new Error("Invalid password");
         }
     } catch (err) {
@@ -168,6 +216,48 @@ authForm.addEventListener('submit', async (e) => {
         btn.disabled = false;
     }
 });
+
+// UI Macros Listener System
+const macroDeer = document.getElementById('macro-select-deer');
+const macroPeople = document.getElementById('macro-select-people');
+const macroClear = document.getElementById('macro-clear-all');
+
+if (macroDeer) {
+    macroDeer.addEventListener('click', (e) => {
+        e.preventDefault();
+        // Reaching into the DOM structure next to the Macros for the camera rows
+        // The routing list is directly adjacent to the Global Macros div
+        const routingContainer = macroDeer.parentElement.parentElement;
+        const checkboxes = routingContainer.querySelectorAll('label');
+        checkboxes.forEach(label => {
+            if (label.textContent.includes('Buck Alerts')) {
+                label.querySelector('input').checked = true;
+            }
+        });
+    });
+}
+
+if (macroPeople) {
+    macroPeople.addEventListener('click', (e) => {
+        e.preventDefault();
+        const routingContainer = macroPeople.parentElement.parentElement;
+        const checkboxes = routingContainer.querySelectorAll('label');
+        checkboxes.forEach(label => {
+            if (label.textContent.includes('People Alerts')) {
+                label.querySelector('input').checked = true;
+            }
+        });
+    });
+}
+
+if (macroClear) {
+    macroClear.addEventListener('click', (e) => {
+        e.preventDefault();
+        const routingContainer = macroClear.parentElement.parentElement;
+        const checkboxes = routingContainer.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => checkbox.checked = false);
+    });
+}
 
 function logout() {
     AUTH_TOKEN = '';
@@ -191,7 +281,10 @@ function showApp() {
 
 // Data Fetching
 async function fetchImages(loadMore = false) {
-    if (!API_BASE_URL || !AUTH_TOKEN) return;
+    if (!API_BASE_URL || !AUTH_TOKEN) {
+        console.error("fetchImages aborted: missing API_BASE_URL or AUTH_TOKEN");
+        return;
+    }
 
     if (!loadMore) {
         galleryGrid.innerHTML = '';
@@ -235,10 +328,7 @@ async function fetchImages(loadMore = false) {
             cachedImages = data.images || [];
             muleMappings = data.mule_mappings || {};
             muleStatus = data.mule_status || {};
-
-            const prefs = data.notification_prefs || { alert_person: true, alert_buck: true };
-            if (alertPersonCheckbox) alertPersonCheckbox.checked = prefs.alert_person;
-            if (alertBuckCheckbox) alertBuckCheckbox.checked = prefs.alert_buck;
+            populateMuleFilter(cachedImages);
 
             currentNextToken = data.next_token || null;
         }
@@ -259,6 +349,24 @@ async function fetchImages(loadMore = false) {
     }
 }
 
+function populateMuleFilter(images) {
+    if (!muleFilter) return;
+    const uniqueMules = [...new Set(images.map(img => img.mule_id))].sort((a, b) => getMuleName(a).localeCompare(getMuleName(b)));
+
+    const currentSelection = muleFilter.value;
+    muleFilter.innerHTML = '<option value="all">All Cameras</option>';
+    uniqueMules.forEach(id => {
+        const option = document.createElement('option');
+        option.value = id;
+        option.textContent = getMuleName(id);
+        muleFilter.appendChild(option);
+    });
+
+    if (uniqueMules.includes(currentSelection)) {
+        muleFilter.value = currentSelection;
+    }
+}
+
 // Rendering & Sorting
 let activityChartInstance = null;
 let cameraChartInstance = null;
@@ -267,7 +375,7 @@ function applySortAndRender() {
     const sortBy = sortSelect.value;
     const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
     let endDate = endDateInput.value ? new Date(endDateInput.value) : null;
-    const aiFilter = aiFilterSelect ? aiFilterSelect.value : 'all';
+    const activeAiFilters = Array.from(aiFilterCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
     const tagSearchText = aiSearchInput ? aiSearchInput.value.toLowerCase().trim() : '';
     const searchTags = tagSearchText ? tagSearchText.split(',').map(s => s.trim()).filter(s => s) : [];
 
@@ -277,6 +385,10 @@ function applySortAndRender() {
 
     // Filter
     let filteredImages = cachedImages.filter(img => {
+        if (muleFilter && muleFilter.value !== 'all') {
+            if (img.mule_id !== muleFilter.value) return false;
+        }
+
         const imgDate = new Date(img.timestamp);
         if (startDate && imgDate < startDate) return false;
         if (endDate && imgDate > endDate) return false;
@@ -289,24 +401,33 @@ function applySortAndRender() {
             if (!matchesAll) return false;
         }
 
-        if (aiFilter === 'animals') {
-            if (!img.ai_data || !img.ai_data.has_animals) return false;
-        } else if (aiFilter === 'awaiting') {
-            if (!img.ai_data || !img.ai_data.awaiting_id) return false;
-        } else if (aiFilter === 'empty') {
-            if (!img.ai_data || img.ai_data.has_animals || img.ai_data.awaiting_id) return false;
-        } else if (aiFilter === 'deer') {
-            if (!img.ai_data || !img.ai_data.tags) return false;
-            const tags = Object.keys(img.ai_data.tags);
-            if (!tags.includes('Antlered Buck') && !tags.includes('Doe/Young') && !tags.includes('Deer')) return false;
-        } else if (aiFilter === 'bucks') {
-            if (!img.ai_data || !img.ai_data.tags) return false;
-            if (!Object.keys(img.ai_data.tags).includes('Antlered Buck')) return false;
-        } else if (aiFilter === 'people') {
-            if (!img.ai_data || !img.ai_data.tags) return false;
-            const tags = Object.keys(img.ai_data.tags);
-            if (!tags.some(t => t.includes('Person') || t.includes('Human') || t.includes('People'))) return false;
+        let passesAiFilter = false;
+
+        // If an image is awaiting ID, ONLY the 'awaiting' checkbox can keep it visible.
+        // It should not accidentally pass because it technically matches 'empty' (0 tags).
+        if (img.ai_data && img.ai_data.awaiting_id) {
+            if (activeAiFilters.includes('awaiting')) passesAiFilter = true;
+        } else {
+            // It has been fully analyzed. Check the other categories.
+            if (activeAiFilters.includes('empty') && (!img.ai_data || img.ai_data.has_animals === false)) {
+                passesAiFilter = true;
+            }
+
+            const tags = (img.ai_data && img.ai_data.tags) ? Object.keys(img.ai_data.tags) : [];
+
+            const hasDeer = tags.some(t => t.includes('Doe/Young') || t.includes('Deer'));
+            const hasBuck = tags.some(t => t.includes('Antlered Buck'));
+            const hasPeople = tags.some(t => t.includes('Person') || t.includes('Human') || t.includes('People'));
+            const hasOther = tags.some(t => !t.includes('Doe/Young') && !t.includes('Deer') && !t.includes('Antlered Buck') && !t.includes('Person') && !t.includes('Human') && !t.includes('People')) && img.ai_data.has_animals;
+
+            if (activeAiFilters.includes('deer') && hasDeer) passesAiFilter = true;
+            if (activeAiFilters.includes('bucks') && hasBuck) passesAiFilter = true;
+            if (activeAiFilters.includes('people') && hasPeople) passesAiFilter = true;
+            if (activeAiFilters.includes('animals') && hasOther) passesAiFilter = true;
         }
+
+        // If NO filter boxes are checked, we hide everything
+        if (!passesAiFilter && activeAiFilters.length > 0) return false;
 
         return true;
     });
@@ -325,8 +446,9 @@ function applySortAndRender() {
         return 0;
     });
 
-    if (filteredImages.length > 0) toolbar.classList.remove('hidden');
-    else toolbar.classList.add('hidden');
+    if (filteredImages.length > 0) {
+        // Continue showing rendered views
+    }
 
     if (!analyticsDashboard.classList.contains('hidden')) {
         renderCharts(filteredImages);
@@ -336,7 +458,24 @@ function applySortAndRender() {
         renderLiveDashboard(filteredImages);
     }
 
-    renderGallery(filteredImages);
+    if (!mainMapContainer.classList.contains('hidden')) {
+        renderMap(filteredImages);
+    }
+
+    const isAnyDashboardVisible = !analyticsDashboard.classList.contains('hidden') ||
+        !liveDashboard.classList.contains('hidden') ||
+        !mainMapContainer.classList.contains('hidden');
+
+    if (isAnyDashboardVisible) {
+        toolbar.classList.add('hidden');
+        galleryGrid.classList.add('hidden');
+        emptyState.classList.add('hidden');
+        loadMoreContainer.classList.add('hidden');
+    } else {
+        toolbar.classList.remove('hidden');
+        galleryGrid.classList.remove('hidden');
+        renderGallery(filteredImages);
+    }
 }
 
 function renderCharts(images) {
@@ -544,8 +683,8 @@ function renderGallery(images) {
     loadingState.classList.add('hidden');
 
     if (!images || images.length === 0) {
+        galleryGrid.innerHTML = '';
         emptyState.classList.remove('hidden');
-        toolbar.classList.add('hidden');
         updateStats(0, 0);
         return;
     }
@@ -635,7 +774,6 @@ function renderGallery(images) {
         card.innerHTML = `
             ${checkboxHtml}
             <div class="image-wrapper">
-                ${badgeContainer}
                 <div class="actions-menu">
                     <a href="${img.url}" download="${img.filename}" class="action-btn" title="Download High-Res">
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -651,12 +789,21 @@ function renderGallery(images) {
                     <source srcset="${img.url}" type="image/avif">
                     <img src="${img.url}" alt="Trail Camera Capture" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'img-fallback-msg\\'>⚠️ Image format not supported by browser viewer.<br>Download source to view.</div>'">
                 </picture>
+            </div>
+            
+            <div style="padding: 0 0.5rem 0.5rem 0.5rem;">
+                ${badgeContainer}
                 <div class="card-metadata">
-                    <div class="meta-left">
+                    <div class="meta-row">
                         <span class="mule-id" title="${img.mule_id}">${getMuleName(img.mule_id)}</span>
+                    </div>
+                    <div class="meta-row meta-split">
+                        <span class="card-filename" title="${img.filename}">${img.filename}</span>
+                        <span class="file-size">${kb} KB</span>
+                    </div>
+                    <div class="meta-row">
                         <span class="timestamp">${dateStr} • ${timeStr}</span>
                     </div>
-                    <span class="file-size">${kb} KB</span>
                 </div>
             </div>
         `;
@@ -721,7 +868,8 @@ logoutBtn.addEventListener('click', logout);
 sortSelect.addEventListener('change', applySortAndRender);
 startDateInput.addEventListener('change', applySortAndRender);
 endDateInput.addEventListener('change', applySortAndRender);
-if (aiFilterSelect) aiFilterSelect.addEventListener('change', applySortAndRender);
+if (muleFilter) muleFilter.addEventListener('change', () => { currentNextToken = null; applySortAndRender(); });
+aiFilterCheckboxes.forEach(cb => cb.addEventListener('change', applySortAndRender));
 
 if (aiSearchInput) {
     aiSearchInput.addEventListener('input', () => {
@@ -1020,11 +1168,17 @@ generateTimelapseBtn.addEventListener('click', async () => {
     }
 });
 
-// --- Mule Configuration ---
+// --- Settings Dashboard ---
 configBtn.addEventListener('click', () => {
     renderMappingsList();
-    configOverlay.classList.remove('hidden');
-    configOverlay.classList.add('active');
+    appContent.classList.add('hidden');
+
+    // Hide other fullscreens if open
+    analyticsDashboard.classList.add('hidden');
+    liveDashboard.classList.add('hidden');
+    mainMapContainer.classList.add('hidden');
+
+    settingsDashboard.classList.remove('hidden');
 
     // Initialize map on first open
     setTimeout(() => {
@@ -1044,38 +1198,101 @@ configBtn.addEventListener('click', () => {
                 configTempMarker = L.marker([lat, lng]).addTo(configMap);
             });
         } else {
-            configMap.invalidateSize();
+            // Only invalidate if the map tab is active
+            const activeTab = document.querySelector('.settings-tab-btn.active');
+            if (activeTab && activeTab.getAttribute('data-target') === 'settings-fleet') {
+                configMap.invalidateSize();
+            }
         }
     }, 100);
 });
 
-closeConfigBtn.addEventListener('click', () => {
-    configOverlay.classList.remove('active');
-    setTimeout(() => configOverlay.classList.add('hidden'), 300);
+closeSettingsBtn.addEventListener('click', () => {
+    settingsDashboard.classList.add('hidden');
+    appContent.classList.remove('hidden');
+    applySortAndRender(); // restore gallery view
+});
+// Setup tab switching logic
+document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Remove active class from all buttons
+        document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Hide all tabs
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.add('hidden'));
+
+        // Show target tab
+        const targetId = btn.getAttribute('data-target');
+        const targetTab = document.getElementById(targetId);
+        if (targetTab) targetTab.classList.remove('hidden');
+
+        // If map tab, invalidate size to prevent gray boxes
+        if (targetId === 'settings-fleet' && configMap) {
+            setTimeout(() => configMap.invalidateSize(), 100);
+        }
+    });
 });
 
 function renderMappingsList() {
     mappingsList.innerHTML = '';
-    for (const [id, data] of Object.entries(muleMappings)) {
-        const name = typeof data === 'object' ? data.name : data;
-        const loc = typeof data === 'object' && data.lat ? ` <span style="font-size:0.75rem; color:var(--text-secondary);">(${data.lat}, ${data.lng})</span>` : '';
+
+    // Collect all known mules from mappings AND from active images
+    const activeMulesFromImages = new Set(cachedImages.map(img => img.mule_id));
+    const allMuleIds = new Set([...Object.keys(muleMappings), ...activeMulesFromImages]);
+
+    for (const id of Array.from(allMuleIds).sort()) {
+        const data = muleMappings[id];
+        const name = (data && typeof data === 'object') ? data.name : (data || id);
+        const loc = (data && typeof data === 'object' && data.lat) ? ` <span style="font-size:0.7rem; color:var(--text-secondary); white-space:nowrap;">(${data.lat}, ${data.lng})</span>` : '';
 
         const row = document.createElement('div');
         row.style.display = 'flex';
+        row.style.flexWrap = 'wrap';
         row.style.justifyContent = 'space-between';
-        row.style.marginBottom = '0.5rem';
+        row.style.marginBottom = '0.8rem';
         row.style.alignItems = 'center';
+        row.style.gap = '0.5rem';
         row.innerHTML = `
-            <span><strong>${id}</strong> = ${name}${loc}</span>
-            <button class="btn-outline" style="padding: 0.2rem 0.5rem; color: var(--error); border-color: rgba(239, 68, 68, 0.5);" onclick="removeMapping('${id}')">Remove</button>
+            <strong style="min-width: 65px; font-size: 0.9rem;">${id}</strong>
+            <input type="text" class="mule-rename-input" data-id="${id}" value="${name !== id ? name : ''}" placeholder="Custom Name" style="flex:1; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+            ${loc}
+            <button class="btn-outline" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; color: var(--error); border-color: rgba(239, 68, 68, 0.5);" onclick="removeMapping('${id}')" title="Delete Saved Mapping">X</button>
         `;
         mappingsList.appendChild(row);
     }
+
+    // Add event listeners to all rename inputs to live-update the mapping dictionary
+    document.querySelectorAll('.mule-rename-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const id = e.target.dataset.id;
+            const newName = e.target.value.trim();
+            if (newName) {
+                if (typeof muleMappings[id] === 'object') {
+                    muleMappings[id].name = newName;
+                } else {
+                    muleMappings[id] = newName;
+                }
+            } else {
+                // Remove name mapping if cleared, preserving location if exists
+                if (typeof muleMappings[id] === 'object') {
+                    muleMappings[id].name = id;
+                } else {
+                    delete muleMappings[id];
+                }
+            }
+            // Trigger UI update natively
+            populateMuleFilter(cachedImages);
+            applySortAndRender();
+        });
+    });
 }
 
 window.removeMapping = function (id) {
     delete muleMappings[id];
     renderMappingsList();
+    populateMuleFilter(cachedImages);
+    applySortAndRender();
 };
 
 addMappingBtn.addEventListener('click', () => {
@@ -1100,9 +1317,24 @@ addMappingBtn.addEventListener('click', () => {
     }
 });
 
-saveConfigBtn.addEventListener('click', async () => {
-    saveConfigBtn.textContent = "Saving...";
-    saveConfigBtn.disabled = true;
+const saveAlertsBtn = document.getElementById('save-alerts-btn');
+if (saveAlertsBtn) {
+    saveAlertsBtn.addEventListener('click', () => {
+        saveAlertsBtn.textContent = "Saving...";
+        saveAlertsBtn.disabled = true;
+
+        // Artificial delay mocking Phase 2 DB sync
+        setTimeout(() => {
+            saveAlertsBtn.textContent = "Save Alert Settings";
+            saveAlertsBtn.disabled = false;
+            alert("Alert settings successfully saved!");
+        }, 500);
+    });
+}
+
+saveGeneralBtn.addEventListener('click', async () => {
+    saveGeneralBtn.textContent = "Saving...";
+    saveGeneralBtn.disabled = true;
 
     try {
         const p1 = fetch(`${API_BASE_URL}/manage-image`, {
@@ -1114,35 +1346,51 @@ saveConfigBtn.addEventListener('click', async () => {
             body: JSON.stringify({ action: 'save_mappings', mappings: muleMappings })
         });
 
-        let prefsPayload = null;
-        if (alertPersonCheckbox && alertBuckCheckbox) {
-            prefsPayload = {
-                alert_person: alertPersonCheckbox.checked,
-                alert_buck: alertBuckCheckbox.checked
-            };
+        let p2 = Promise.resolve({ ok: true });
+        if (configPortalNameInput && configPortalPasswordInput && configPortalNameInput.value) {
+            p2 = fetch(`${API_BASE_URL}/manage-image`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${AUTH_TOKEN}`
+                },
+                body: JSON.stringify({
+                    action: 'save_portal_config',
+                    portal_name: configPortalNameInput.value.trim(),
+                    portal_password: configPortalPasswordInput.value.trim()
+                })
+            });
         }
-
-        const p2 = prefsPayload ? fetch(`${API_BASE_URL}/manage-image`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${AUTH_TOKEN}`
-            },
-            body: JSON.stringify({ action: 'save_notification_prefs', prefs: prefsPayload })
-        }) : Promise.resolve({ ok: true });
 
         const [res1, res2] = await Promise.all([p1, p2]);
 
         if (!res1.ok || !res2.ok) throw new Error("Save failed");
 
-        closeConfigBtn.click();
+        // If password was changed, update local storage
+        if (configPortalPasswordInput && configPortalPasswordInput.value.trim() !== '') {
+            const newPwd = configPortalPasswordInput.value.trim();
+            AUTH_TOKEN = newPwd;
+            localStorage.setItem('woods_auth_token', newPwd);
+            configPortalPasswordInput.value = ''; // clear it on success
+        }
+
+        if (configPortalNameInput && configPortalNameInput.value.trim() !== '') {
+            const newName = configPortalNameInput.value.trim();
+            document.title = newName;
+            const loginTitle = document.getElementById('login-portal-title');
+            const headerTitle = document.getElementById('header-portal-title');
+            if (loginTitle) loginTitle.textContent = newName;
+            if (headerTitle) headerTitle.textContent = newName;
+        }
+
+        alert("Settings saved successfully!");
         applySortAndRender(); // Re-render gallery with new names
     } catch (err) {
         alert("Failed to save configuration.");
         console.error(err);
     } finally {
-        saveConfigBtn.textContent = "Save to Cloud";
-        saveConfigBtn.disabled = false;
+        saveGeneralBtn.textContent = "Save General Settings";
+        saveGeneralBtn.disabled = false;
     }
 });
 

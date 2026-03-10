@@ -27,7 +27,7 @@
             <svg class="auth-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
-            <h2>Woods-Net Portal</h2>
+            <h2 id="login-portal-title">Woods-Net Portal</h2>
             <p>Please enter the base station password to view captures.</p>
             <form id="auth-form">
                 <input type="password" id="password-input" placeholder="Password" required autofocus>
@@ -37,52 +37,183 @@
         </div>
     </div>
 
-    <!-- Mule Config Modal -->
-    <div id="config-overlay" class="overlay hidden">
-        <div class="auth-card" style="max-width: 500px;">
-            <h2>Mule Configuration</h2>
-            <p>Map camera IDs to human names and GPS locations.</p>
+    <!-- Settings Dashboard (Full Page Replacement for Modal) -->
+    <div id="settings-dashboard" class="container hidden">
+        <header class="app-header">
+            <div class="header-left">
+                <h1 style="font-size: 1.5rem;">Settings</h1>
+                <span class="badge"
+                    style="background: rgba(59, 130, 246, 0.1); color: #60a5fa; border-color: rgba(96, 165, 250, 0.2);">Admin</span>
+            </div>
+            <div class="header-right">
+                <button id="close-settings-btn" class="btn-outline">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    Close
+                </button>
+            </div>
+        </header>
 
-            <div id="config-map"
-                style="height: 250px; width: 100%; border-radius: var(--radius-md); margin-bottom: 1rem; border: 1px solid var(--border); z-index: 10;">
+        <div style="display: flex; gap: 2rem; align-items: flex-start;" class="settings-layout">
+            <!-- Left Navigation -->
+            <div
+                style="flex: 0 0 250px; display: flex; flex-direction: column; gap: 0.5rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem;">
+                <button class="settings-tab-btn active" data-target="settings-general">General</button>
+                <button class="settings-tab-btn" data-target="settings-fleet">Cam Mgmt</button>
+                <button class="settings-tab-btn" data-target="settings-subs">Alerts</button>
             </div>
 
-            <div id="mappings-list" style="margin-bottom: 1rem; text-align: left; max-height: 150px; overflow-y: auto;">
-            </div>
+            <!-- Main Content Area -->
+            <div
+                style="flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem;">
 
-            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
-                <div style="display: flex; gap: 0.5rem;">
-                    <input type="text" id="new-mule-id" placeholder="Mule ID" style="flex: 1; min-width: 0;">
-                    <input type="text" id="new-mule-name" placeholder="Name (e.g. Tree Stand)"
-                        style="flex: 2; min-width: 0;">
+                <!-- General Settings Tab -->
+                <div id="settings-general" class="settings-tab">
+                    <h2 style="margin-bottom: 0.5rem;">Portal Configuration</h2>
+                    <p style="margin-bottom: 2rem; color: var(--text-secondary); font-size: 0.875rem;">Brand your portal
+                        and manage security.</p>
+                    <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 400px;">
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500;">Portal
+                                Name</label>
+                            <input type="text" id="config-portal-name" placeholder="e.g. Deer Camp"
+                                style="width: 100%;">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 500;">New
+                                Base Password</label>
+                            <input type="password" id="config-portal-password" placeholder="Leave blank to keep current"
+                                style="width: 100%;">
+                        </div>
+                    </div>
+                    <div style="margin-top: 2rem;">
+                        <button id="save-general-btn">Save General Settings</button>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 0.5rem; align-items: center;">
-                    <input type="text" id="new-mule-lat" placeholder="Latitude"
-                        style="flex: 1; font-size: 0.8rem; min-width: 0;" readonly>
-                    <input type="text" id="new-mule-lng" placeholder="Longitude"
-                        style="flex: 1; font-size: 0.8rem; min-width: 0;" readonly>
-                    <button id="add-mapping-btn" class="btn-outline"
-                        style="flex: 1; padding: 0.75rem 0.5rem; font-size: 0.9rem;">Add Pin</button>
-                </div>
-            </div>
 
-            <hr style="border: none; border-top: 1px solid var(--border); margin: 1.5rem 0;">
-            <h3 style="margin-top: 0; font-size: 1.1rem; margin-bottom: 0.25rem;">Notification Alerts</h3>
-            <p style="margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);">Select which AI detections
-                should trigger SMS alerts.</p>
-            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="alert-person" checked>
-                    <span>Alert on People (Trespassers / Hunters)</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                    <input type="checkbox" id="alert-buck" checked>
-                    <span>Alert on Target Bucks (Antlered)</span>
-                </label>
-            </div>
-            <div style="display:flex; gap:1rem; margin-top:2rem;">
-                <button id="save-config-btn" style="flex:1;">Save to Cloud</button>
-                <button id="close-config-btn" class="btn-outline" style="flex:1;">Cancel</button>
+                <!-- Fleet Management Tab -->
+                <div id="settings-fleet" class="settings-tab hidden">
+                    <h2 style="margin-bottom: 0.5rem;">Camera Management</h2>
+                    <p style="margin-bottom: 2rem; color: var(--text-secondary); font-size: 0.875rem;">Assign GPS
+                        coordinates and custom names to hardware IDs.</p>
+
+                    <div id="config-map"
+                        style="height: 300px; width: 100%; border-radius: var(--radius-md); margin-bottom: 1.5rem; border: 1px solid var(--border); z-index: 10;">
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                        <input type="text" id="new-mule-id" placeholder="Mule ID"
+                            style="flex: 1 1 100px; min-width: 0;">
+                        <input type="text" id="new-mule-name" placeholder="Name (e.g. Tree Stand)"
+                            style="flex: 2 1 150px; min-width: 0;">
+                        <input type="text" id="new-mule-lat" placeholder="Latitude"
+                            style="flex: 1; font-size: 0.8rem; min-width: 0;" readonly>
+                        <input type="text" id="new-mule-lng" placeholder="Longitude"
+                            style="flex: 1; font-size: 0.8rem; min-width: 0;" readonly>
+                        <button id="add-mapping-btn" class="btn-outline" style="flex: 1; padding: 0.75rem 0.5rem;">Add
+                            Pin</button>
+                    </div>
+
+                    <div id="mappings-list" style="text-align: left; max-height: 400px; overflow-y: auto;">
+                        <!-- JS populated rules go here -->
+                    </div>
+                </div>
+
+                <!-- Notifications Tab -->
+                <div id="settings-subs" class="settings-tab hidden">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;">
+                        <div>
+                            <h2 style="margin-bottom: 0.5rem;">Alerts</h2>
+                            <p style="color: var(--text-secondary); font-size: 0.875rem;">Manage who receives AI alerts
+                                and exactly which cameras trigger them.</p>
+                        </div>
+                        <button id="add-subscriber-btn" style="white-space: nowrap;">+ Add Subscriber</button>
+                    </div>
+
+                    <!-- Temporary Container while we mock the layout -->
+                    <div id="subscribers-container" style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+                        <!-- Mock Subscriber Card -->
+                        <div
+                            style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; background: rgba(0,0,0,0.1);">
+                            <!-- Status & Delivery -->
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    <h3 style="margin: 0;">Jeff</h3>
+                                    <span class="badge"
+                                        style="background: rgba(16, 185, 129, 0.1); color: #34d399; border-color: rgba(52, 211, 153, 0.2);">Active</span>
+                                </div>
+                                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                                    <label
+                                        style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                                        <input type="checkbox" checked> SMS (+15551234567)
+                                    </label>
+                                    <label
+                                        style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                                        <input type="checkbox" checked> Email (jeff@email.com)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Camera Routing List -->
+                            <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+                                <!-- Global Macros -->
+                                <div
+                                    style="display: flex; gap: 0.5rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                    <button id="macro-select-deer" class="btn-outline"
+                                        style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem;">Select all -
+                                        Deer</button>
+                                    <button id="macro-select-people" class="btn-outline"
+                                        style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem;">Select all -
+                                        People</button>
+                                    <button id="macro-clear-all" class="btn-outline"
+                                        style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem; color: var(--error); border-color: rgba(239, 68, 68, 0.3);">Clear
+                                        all</button>
+                                </div>
+
+                                <!-- Row 2 -->
+                                <div
+                                    style="display: flex; flex-direction: column; gap: 0.5rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div style="font-weight: 500;">MULE05 (Cabin)</div>
+                                        <button class="btn-outline"
+                                            style="padding: 0.2rem 0.6rem; font-size: 0.75rem; color: var(--error); border-color: rgba(239, 68, 68, 0.3);">Remove</button>
+                                    </div>
+                                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                                        <label
+                                            style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                                            <input type="checkbox"> People Alerts
+                                        </label>
+                                        <label
+                                            style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                                            <input type="checkbox" checked> Buck Alerts
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <button class="btn-outline" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">+ Add
+                                    Camera Override</button>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Save Alerts Config -->
+                    <div
+                        style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; display: flex; justify-content: center;">
+                        <button id="save-alerts-btn" class="btn-primary"
+                            style="padding: 0.75rem 1.5rem; font-weight: 500;">Save Alert Settings</button>
+                    </div>
+
+                </div>
+
             </div>
         </div>
     </div>
@@ -106,11 +237,22 @@
     <!-- Main Application UI -->
     <div id="app-content" class="container hidden">
         <header class="app-header">
-            <div class="header-left">
-                <h1>Woods-Net</h1>
-                <span class="badge">Live Fleet</span>
+            <div class="header-left" style="align-items: center; gap: 1rem;">
+                <button id="config-btn" class="btn-outline"
+                    style="padding: 0.5rem; border: none; background: transparent; color: var(--text-secondary);"
+                    title="Settings">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                        </path>
+                    </svg>
+                </button>
+                <h1 id="header-portal-title" style="margin: 0;">Woods-Net</h1>
+                <button id="logout-btn" class="btn-outline"
+                    style="font-size: 0.75rem; padding: 0.2rem 0.6rem; border-color: rgba(255,255,255,0.1); color: var(--text-secondary);">Logout</button>
             </div>
-            <div class="header-right">
+            <div class="header-right dashboard-actions">
                 <button id="theme-toggle-btn" class="btn-outline" title="Toggle Light/Dark Theme">
                     <svg id="theme-icon-moon" class="hidden" viewBox="0 0 24 24" width="16" height="16"
                         stroke="currentColor" stroke-width="2" fill="none">
@@ -133,13 +275,13 @@
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
                         <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
                     </svg>
-                    Dashboard
+                    <span class="btn-text">Dashboard</span>
                 </button>
                 <button id="dashboard-btn" class="btn-outline" title="Analytics & Charts">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
                         <path d="M18 20V10M12 20V4M6 20v-6"></path>
                     </svg>
-                    Charts
+                    <span class="btn-text">Charts</span>
                 </button>
                 <button id="map-view-btn" class="btn-outline">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
@@ -147,25 +289,15 @@
                         <line x1="9" y1="3" x2="9" y2="21"></line>
                         <line x1="15" y1="3" x2="15" y2="21"></line>
                     </svg>
-                    Trail Map
-                </button>
-                <button id="config-btn" class="btn-outline">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path
-                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
-                        </path>
-                    </svg>
-                    Settings
+                    <span class="btn-text">Map</span>
                 </button>
                 <button id="refresh-btn" class="btn-refresh">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
                         <polyline points="23 4 23 10 17 10"></polyline>
                         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                     </svg>
-                    Refresh
+                    <span class="btn-text">Refresh</span>
                 </button>
-                <button id="logout-btn" class="btn-outline">Logout</button>
             </div>
         </header>
 
@@ -220,20 +352,42 @@
                         <input type="date" id="end-date" class="sort-dropdown" title="End Date">
                     </div>
 
+                    <label for="mule-filter" class="sort-label">Camera:</label>
+                    <select id="mule-filter" class="sort-dropdown" style="min-width: 140px;">
+                        <option value="all">All Cameras</option>
+                    </select>
+
                     <label for="ai-search" class="sort-label">Tags:</label>
                     <input type="text" id="ai-search" class="sort-dropdown" placeholder="e.g. buck, bird"
-                        style="width: 140px;">
+                        style="min-width: 140px;">
 
-                    <label for="ai-filter" class="sort-label">Preset:</label>
-                    <select id="ai-filter" class="sort-dropdown">
-                        <option value="all">All Images</option>
-                        <option value="awaiting">Awaiting Identification</option>
-                        <option value="animals">Animals Only</option>
-                        <option value="deer">Deer Only</option>
-                        <option value="bucks">Bucks Only</option>
-                        <option value="people">People Only</option>
-                        <option value="empty">Empty / No Animals</option>
-                    </select>
+                    <div id="ai-filters"
+                        style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+                        <label
+                            style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" value="awaiting" class="ai-filter-cb" checked> Awaiting
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" value="bucks" class="ai-filter-cb" checked> Bucks
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" value="deer" class="ai-filter-cb" checked> Does
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" value="animals" class="ai-filter-cb" checked> Other Wildlife
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" value="people" class="ai-filter-cb" checked> People
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; cursor: pointer;">
+                            <input type="checkbox" value="empty" class="ai-filter-cb" checked> Empty
+                        </label>
+                    </div>
 
                     <label for="sort-select" class="sort-label">Sort By:</label>
                     <select id="sort-select" class="sort-dropdown">
@@ -276,7 +430,7 @@
         </main>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=3"></script>
 </body>
 
 </html>

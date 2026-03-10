@@ -4,6 +4,11 @@ import os
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+import io
+from PIL import Image, ExifTags
+from pillow_heif import register_heif_opener
+
+register_heif_opener()
 
 rekognition = boto3.client('rekognition')
 dynamodb = boto3.client('dynamodb')
@@ -71,62 +76,112 @@ def lambda_handler(event, context):
             
             # Call AWS Rekognition
             # We use a relatively high confidence threshold (75%) to avoid false positives (like a log looking like a bear).
+            
+            # --- START AVIF CONVERSION LOGIC ---
+            # Rekognition doesn't natively support AVIF, so we must download and convert to JPEG in-memory.
+            print(f"Downloading and converting AVIF to JPEG for Rekognition...")
+            img_obj = s3_client.get_object(Bucket=bucket, Key=key)
+            img_bytes = img_obj['Body'].read()
+            image = Image.open(io.BytesIO(img_bytes))
+            
+            # Extract EXIF early while we have the raw opened AVIF Pillow object
+            exif = image.getexif()
+            capture_time = None
+            if exif:
+                # DateTimeOriginal (36867) is usually nested within the ExifOffset IFD (0x8769)
+                exif_time_str = None
+                ifd = exif.get_ifd(0x8769)
+                if ifd and 36867 in ifd:
+                    exif_time_str = ifd[36867]
+                elif 306 in exif: # Fallback to standard DateTime
+                    exif_time_str = exif[306]
+                    
+                if exif_time_str:
+                    try:
+                        dt = datetime.strptime(exif_time_str, '%Y:%m:%d %H:%M:%S')
+                        capture_time = dt.isoformat() + "Z"
+                    except ValueError:
+                        pass
+            
+            # Convert to JPEG bytes for Rekognition
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            jpeg_io = io.BytesIO()
+            image.save(jpeg_io, format="JPEG", quality=85)
+            jpeg_bytes = jpeg_io.getvalue()
+            
             response = rekognition.detect_labels(
-                Image={
-                    'S3Object': {
-                        'Bucket': bucket,
-                        'Name': key
-                    }
-                },
+                Image={'Bytes': jpeg_bytes},
                 MaxLabels=15,
                 MinConfidence=75
             )
+            # --- END AVIF CONVERSION LOGIC ---
             labels = response.get('Labels', [])
             
-            # First pass: Check for antler/horn indicators anywhere in the scene
+            # Define the only Categories we care about from AWS
+            allowed_categories = [
+                'Animals and Pets',
+                'Person Description' # (Face, Male, Adult, Person)
+            ]
+            
+            # First pass: Look for specific flags
             has_antlers = any(l['Name'] in ['Antler', 'Horn'] for l in labels)
+            has_person_parts = False # Tracks if we found *any* human attributes
             has_animals = False
-            has_person = False
             has_buck = False
             detected_tags = {}
             
             for label in labels:
                 label_name = label['Name']
                 
-                # Rekognition groups specific animals under general categories.
-                if label_name in ['Animal', 'Wildlife', 'Mammal', 'Bird', 'Antler', 'Horn']:
+                # Check if this tag belongs to an allowed category
+                label_categories = [cat['Name'] for cat in label.get('Categories', [])]
+                if not any(c in allowed_categories for c in label_categories):
+                    continue # Ignore Weather, Plants, Furniture, Scenery, etc.
+                    
+                # We're in an allowed category! Let's handle specific rules.
+                
+                # --- Human Handling ---
+                if 'Person Description' in label_categories or label_name in ['Person', 'Human', 'People']:
+                    has_person_parts = True
+                    has_animals = True # Set flag so it's not filtered out as 'empty'
+                    continue # We don't want to save "Face", "Male", "Shirt", we just want "Person" eventually
+                
+                # --- Animal Handling ---
+                if 'Animals and Pets' in label_categories:
                     if label_name not in ['Antler', 'Horn']:
                         has_animals = True
-                    continue # Skip recording generic tags or standalone antler parts
-                
-                if label_name in ['Person', 'Human', 'People']:
-                    has_animals = True # Set flag so it's not filtered out as 'empty' by the 'Animals Only' UI filter
-                    has_person = True
-                
-                # Custom logic for Deer sexing based on user request
-                if label_name == 'Deer':
-                    if has_antlers:
-                        label_name = 'Antlered Buck'
-                        has_buck = True
-                    else:
-                        label_name = 'Doe/Young'
+                        
+                    # Skip recording generic tags or standalone antler parts if we can avoid it, but we'll prune generics later
+                    if label_name in ['Animal', 'Wildlife', 'Mammal', 'Antler', 'Horn']:
+                        continue 
+                        
+                    # Custom logic for Deer sexing based on user request
+                    if label_name == 'Deer':
+                        if has_antlers:
+                            label_name = 'Antlered Buck'
+                            has_buck = True
+                        else:
+                            label_name = 'Doe/Young'
                 
                 # If there are bounding boxes (Instances), we count them.
-                # Otherwise, it's a general scene tag (e.g. "Outdoors", "Nature", "Forest").
-                # We prioritize specific nouns over general scene descriptions.
-                
-                # Let's filter out super generic tags to keep the UI clean
-                ignore_list = ['Nature', 'Outdoors', 'Land', 'Plant', 'Vegetation', 'Tree', 'Woodland', 'Forest', 'Grass', 'Ground']
-                if label_name in ignore_list:
-                    continue
-                
-                count = len(label['Instances'])
+                count = len(label.get('Instances', []))
                 if count > 0:
                     detected_tags[label_name] = count
                 else:
-                    # It's a high-confidence tag without bounding boxes (e.g., "Deer" but the AI isn't sure exactly how many or where)
                     detected_tags[label_name] = 1
-                    
+            
+            # --- Final Tag Consolidation ---
+            # If we saw ANY human attributes (Face, Male, Shirt, etc), we consolidate them all into exactly one "Person" tag.
+            if has_person_parts:
+                # We count the actual number of 'Person' instances Rekognition found, or default to 1
+                person_count = 1
+                for l in labels:
+                    if l['Name'] == 'Person' and len(l.get('Instances', [])) > 0:
+                        person_count = len(l['Instances'])
+                        break
+                detected_tags['Person'] = person_count
+                
             # If no specific tags were found, but we flagged "Animal", ensure we at least record that.
             if has_animals and not detected_tags:
                 detected_tags["Unknown Wildlife"] = 1
@@ -138,7 +193,7 @@ def lambda_handler(event, context):
                 try:
                     custom_response = rekognition.detect_custom_labels(
                         ProjectVersionArn=custom_model_arn,
-                        Image={'S3Object': {'Bucket': bucket, 'Name': key}},
+                        Image={'Bytes': jpeg_bytes},
                         MinConfidence=60
                     )
                     for custom_label in custom_response.get('CustomLabels', []):
@@ -153,12 +208,16 @@ def lambda_handler(event, context):
             # { 'Deer': {'N': '2'}, 'Raccoon': {'N': '1'} }
             dynamo_tags = {k: {'N': str(v)} for k, v in detected_tags.items()}
             
+            # EXIF extraction was handled at the beginning of the script.
+
             # Store in DynamoDB
             item = {
                 'ImageKey': {'S': key},
                 'HasAnimals': {'BOOL': has_animals},
                 'Tags': {'M': dynamo_tags}
             }
+            if capture_time:
+                item['CaptureTime'] = {'S': capture_time}
             
             if weather_data:
                 t = weather_data.get('temperature_c')
@@ -219,7 +278,7 @@ def lambda_handler(event, context):
                 subject = ""
                 msg_body = ""
                 
-                if has_person and alert_person:
+                if has_person_parts and alert_person:
                     should_alert = True
                     subject = "🚨 Trespasser Alert"
                     msg_body = "Woods-Net AI detected: PERSON\n"

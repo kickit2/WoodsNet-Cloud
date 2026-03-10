@@ -21,6 +21,19 @@ def lambda_handler(event, context):
     auth_header = headers.get('authorization', '')
     expected_token = os.environ.get('PORTAL_PASSWORD', 'woods-net-demo')
     
+    try:
+        dynamodb = boto3.client('dynamodb')
+        prefs_response = dynamodb.get_item(
+            TableName='WoodsNetNotificationPrefs',
+            Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}}
+        )
+        if 'Item' in prefs_response:
+            item = prefs_response['Item']
+            if 'PortalPassword' in item:
+                expected_token = item['PortalPassword']['S']
+    except Exception as e:
+        print(f"Error fetching portal config from DynamoDB: {e}")
+    
     cors_headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'OPTIONS,POST',

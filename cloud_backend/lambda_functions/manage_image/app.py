@@ -17,6 +17,19 @@ def lambda_handler(event, context):
     
     expected_token = os.environ.get('PORTAL_PASSWORD', 'woods-net-demo')
     
+    try:
+        dynamodb = boto3.client('dynamodb')
+        prefs_response = dynamodb.get_item(
+            TableName='WoodsNetNotificationPrefs',
+            Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}}
+        )
+        if 'Item' in prefs_response:
+            item = prefs_response['Item']
+            if 'PortalPassword' in item:
+                expected_token = item['PortalPassword']['S']
+    except Exception as e:
+        print(f"Error fetching portal config from DynamoDB: {e}")
+    
     cors_headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'OPTIONS,POST',
@@ -144,12 +157,13 @@ def lambda_handler(event, context):
             prefs = body.get('prefs', {})
             try:
                 dynamodb = boto3.client('dynamodb')
-                dynamodb.put_item(
+                dynamodb.update_item(
                     TableName='WoodsNetNotificationPrefs',
-                    Item={
-                        'ConfigKey': {'S': 'GLOBAL_PREFS'},
-                        'AlertOnPerson': {'BOOL': bool(prefs.get('alert_person', True))},
-                        'AlertOnBuck': {'BOOL': bool(prefs.get('alert_buck', True))}
+                    Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}},
+                    UpdateExpression='SET AlertOnPerson = :aop, AlertOnBuck = :aob',
+                    ExpressionAttributeValues={
+                        ':aop': {'BOOL': bool(prefs.get('alert_person', True))},
+                        ':aob': {'BOOL': bool(prefs.get('alert_buck', True))}
                     }
                 )
                 return {
@@ -164,7 +178,40 @@ def lambda_handler(event, context):
                     'headers': cors_headers,
                     'body': json.dumps({'error': 'Failed to save preferences to DynamoDB.'})
                 }
+                
+        elif action == 'save_portal_config':
+            portal_name = body.get('portal_name')
+            portal_password = body.get('portal_password')
+            if not portal_name or not portal_password:
+                return {
+                    'statusCode': 400,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': 'Missing required fields: portal_name or portal_password'})
+                }
             
+            try:
+                dynamodb = boto3.client('dynamodb')
+                dynamodb.update_item(
+                    TableName='WoodsNetNotificationPrefs',
+                    Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}},
+                    UpdateExpression='SET PortalName = :pn, PortalPassword = :pp',
+                    ExpressionAttributeValues={
+                        ':pn': {'S': portal_name},
+                        ':pp': {'S': portal_password}
+                    }
+                )
+                return {
+                    'statusCode': 200,
+                    'headers': cors_headers,
+                    'body': json.dumps({'message': 'Successfully saved portal config.'})
+                }
+            except Exception as e:
+                print(f"Error saving portal config to DynamoDB: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': 'Failed to save portal config to DynamoDB.'})
+                }
         elif action == 'rename':
             new_key = body.get('new_key')
             if not new_key:

@@ -224,7 +224,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
              },
              {
                  "Effect": "Allow",
-                 "Action": ["dynamodb:PutItem", "dynamodb:Scan", "dynamodb:GetItem", "dynamodb:BatchGetItem"],
+                 "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Scan", "dynamodb:GetItem", "dynamodb:BatchGetItem"],
                  "Resource": [
                      f"arn:aws:dynamodb:{region}:{account_id}:table/{table_name}",
                      f"arn:aws:dynamodb:{region}:{account_id}:table/WoodsNetNotificationPrefs"
@@ -259,12 +259,18 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
     role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
     
     def deploy_lambda(func_name, code_path, extra_env=None, timeout=10):
-        zip_path = f"{func_name}.zip"
-        with zipfile.ZipFile(zip_path, 'w') as z:
-            z.write(code_path, arcname='app.py')
-            
-        with open(zip_path, 'rb') as f:
-            zipped_code = f.read()
+        if code_path.endswith('.zip'):
+            zip_path = code_path
+            with open(zip_path, 'rb') as f:
+                zipped_code = f.read()
+            cleanup_zip = False
+        else:
+            zip_path = f"{func_name}.zip"
+            with zipfile.ZipFile(zip_path, 'w') as z:
+                z.write(code_path, arcname='app.py')
+            with open(zip_path, 'rb') as f:
+                zipped_code = f.read()
+            cleanup_zip = True
             
         env_vars = {
             'UPLOAD_BUCKET_NAME': bucket_name,
@@ -276,7 +282,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
         try:
             response = lambda_client.create_function(
                 FunctionName=func_name,
-                Runtime='python3.9',
+                Runtime='python3.12',
                 Role=role_arn,
                 Handler='app.lambda_handler',
                 Code={'ZipFile': zipped_code},
@@ -297,12 +303,13 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
 
             lambda_client.update_function_configuration(
                 FunctionName=func_name,
+                Runtime='python3.12',
                 Environment={'Variables': env_vars},
                 Timeout=timeout
             )
             print(f"    -> {func_name} updated.")
             
-        if os.path.exists(zip_path):
+        if cleanup_zip and os.path.exists(zip_path):
             os.remove(zip_path)
             
         return f"arn:aws:lambda:{region}:{account_id}:function:{func_name}"
@@ -318,12 +325,20 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
     if custom_labels_arn:
         analyze_env['CUSTOM_LABELS_PROJECT_ARN'] = custom_labels_arn
         
-    analyze_lambda_arn = deploy_lambda(analyze_func_name, 'lambda_functions/analyze_image/app.py', extra_env=analyze_env)
+    analyze_lambda_arn = deploy_lambda(analyze_func_name, 'lambda_functions/analyze_image/analyze.zip', extra_env=analyze_env)
 
     # ==========================================
     # 3.5 Configure S3 Event Trigger for AI Lambda
     # ==========================================
     print(f"\n[3.5] Configuring S3 Event Trigger for {analyze_func_name}")
+    try:
+        lambda_client.remove_permission(
+            FunctionName=analyze_func_name,
+            StatementId='s3-invoke-permission'
+        )
+    except lambda_client.exceptions.ResourceNotFoundException:
+        pass
+
     try:
         lambda_client.add_permission(
             FunctionName=analyze_func_name,
@@ -333,8 +348,8 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
             SourceArn=f"arn:aws:s3:::{bucket_name}",
             SourceAccount=account_id
         )
-    except lambda_client.exceptions.ResourceConflictException:
-        pass
+    except Exception as e:
+        print(f"    -> Warning setting permission: {e}")
 
     print("    -> Waiting 5s for IAM policy propagation...")
     time.sleep(5)
@@ -349,8 +364,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                     'Filter': {
                         'Key': {
                             'FilterRules': [
-                                {'Name': 'prefix', 'Value': 'woods-net/mules/'},
-                                {'Name': 'suffix', 'Value': '.avif'}
+                                {'Name': 'prefix', 'Value': 'woods-net/mules/'}
                             ]
                         }
                     }

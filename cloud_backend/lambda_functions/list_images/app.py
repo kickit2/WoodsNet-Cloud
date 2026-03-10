@@ -10,14 +10,31 @@ def lambda_handler(event, context):
     Includes a basic hardcoded password check for MVP security.
     """
     try:
+        portal_name = "Woods-Net"
+        expected_token = os.environ.get('PORTAL_PASSWORD', 'woods-net-demo')
+        notification_prefs = {'alert_person': True, 'alert_buck': True}
+        
+        try:
+            dynamodb = boto3.client('dynamodb')
+            prefs_response = dynamodb.get_item(
+                TableName='WoodsNetNotificationPrefs',
+                Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}}
+            )
+            if 'Item' in prefs_response:
+                item = prefs_response['Item']
+                if 'PortalName' in item:
+                    portal_name = item['PortalName']['S']
+                if 'PortalPassword' in item:
+                    expected_token = item['PortalPassword']['S']
+                notification_prefs['alert_person'] = item.get('AlertOnPerson', {}).get('BOOL', True)
+                notification_prefs['alert_buck'] = item.get('AlertOnBuck', {}).get('BOOL', True)
+        except Exception as e:
+            print(f"Error fetching portal config from DynamoDB: {e}")
+
         # Extract headers to check for our simple MVP password
         headers = event.get('headers', {})
         # API Gateway lowercases headers
         auth_header = headers.get('authorization', '')
-        
-        # Simple MVP Authentication using a token passed from the frontend
-        # In production, use AWS Cognito or a proper JWT flow
-        expected_token = os.environ.get('PORTAL_PASSWORD', 'woods-net-demo')
         
         if auth_header != f"Bearer {expected_token}":
             return {
@@ -26,7 +43,7 @@ def lambda_handler(event, context):
                     'Access-Control-Allow-Origin': '*',
                     'Content-Type': 'application/json'
                 },
-                'body': json.dumps({'error': 'Unauthorized: Invalid or missing password'})
+                'body': json.dumps({'error': 'Unauthorized: Invalid or missing password', 'portal_name': portal_name})
             }
 
         bucket_name = os.environ.get('UPLOAD_BUCKET_NAME')
@@ -80,7 +97,7 @@ def lambda_handler(event, context):
                         RequestItems={
                             table_name: {
                                 'Keys': keys_for_dynamo,
-                                'AttributesToGet': ['ImageKey', 'HasAnimals', 'Tags', 'Weather']
+                                'AttributesToGet': ['ImageKey', 'HasAnimals', 'Tags', 'Weather', 'CaptureTime']
                             }
                         }
                     )
@@ -95,10 +112,13 @@ def lambda_handler(event, context):
                         tags_parsed = {k: int(v['N']) for k, v in tags_raw.items() if 'N' in v}
                         weather_parsed = {k: float(v['N']) for k, v in weather_raw.items() if 'N' in v} if weather_raw else None
                         
+                        capture_time = item.get('CaptureTime', {}).get('S')
+                        
                         ai_tags_map[img_key] = {
                             'has_animals': has_animals,
                             'tags': tags_parsed,
-                            'weather': weather_parsed
+                            'weather': weather_parsed,
+                            'capture_time': capture_time
                         }
                 except Exception as e:
                     print(f"Error fetching AI tags from DynamoDB: {e}")
@@ -156,34 +176,26 @@ def lambda_handler(event, context):
                     ExpiresIn=3600 
                 )
                 
+                # Use EXIF Capture Time if available, else fallback to S3 Upload Date
+                ai_data = ai_tags_map.get(key, {'has_animals': False, 'tags': {}, 'weather': None, 'awaiting_id': True, 'capture_time': None})
+                
+                timestamp_str = ai_data.get('capture_time')
+                if not timestamp_str:
+                    timestamp_str = obj['LastModified'].replace(tzinfo=None).isoformat() + "Z"
+                
                 images.append({
                     'key': key,
                     'mule_id': mule_id,
                     'filename': filename,
                     'size_bytes': obj['Size'],
-                    # Convert datetime to ISO string for JSON serialization
-                    # Removing the tzinfo for simplicity in the frontend
-                    'timestamp': obj['LastModified'].replace(tzinfo=None).isoformat() + "Z", 
+                    'timestamp': timestamp_str, 
                     'url': presigned_url,
-                    'ai_data': ai_tags_map.get(key, {'has_animals': False, 'tags': {}, 'weather': None, 'awaiting_id': True})
+                    'ai_data': ai_data
                 })
 
         next_token = response.get('NextContinuationToken')
 
-        # Fetch Notification Prefs from DynamoDB
-        notification_prefs = {'alert_person': True, 'alert_buck': True}
-        try:
-            dynamodb = boto3.client('dynamodb')
-            prefs_response = dynamodb.get_item(
-                TableName='WoodsNetNotificationPrefs',
-                Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}}
-            )
-            if 'Item' in prefs_response:
-                item = prefs_response['Item']
-                notification_prefs['alert_person'] = item.get('AlertOnPerson', {}).get('BOOL', True)
-                notification_prefs['alert_buck'] = item.get('AlertOnBuck', {}).get('BOOL', True)
-        except Exception as e:
-            print(f"Error fetching notification prefs: {e}")
+        # Notification Prefs are now fetched at the beginning along with the portal config.
 
         return {
             'statusCode': 200,
@@ -193,7 +205,7 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Headers': 'Authorization'
             },
-            'body': json.dumps({'images': images, 'mule_mappings': mule_mappings, 'mule_status': mule_status, 'notification_prefs': notification_prefs, 'next_token': next_token})
+            'body': json.dumps({'images': images, 'mule_mappings': mule_mappings, 'mule_status': mule_status, 'notification_prefs': notification_prefs, 'next_token': next_token, 'portal_name': portal_name})
         }
 
     except ClientError as e:

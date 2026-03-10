@@ -53,8 +53,10 @@ body {
     background: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(8px);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    padding: 2rem 1rem;
     z-index: 50;
     transition: opacity 0.3s ease;
 }
@@ -66,6 +68,7 @@ body {
     border: 1px solid var(--border);
     width: 100%;
     max-width: 400px;
+    margin: auto;
     text-align: center;
     box-shadow: var(--shadow-lg);
     animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -117,7 +120,7 @@ button {
     background: var(--accent);
     color: white;
     border: none;
-    padding: 0.75rem 1rem;
+    padding: 0.85rem 1rem;
     border-radius: var(--radius-md);
     font-weight: 500;
     font-size: 1rem;
@@ -143,6 +146,11 @@ button:disabled {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-secondary);
+}
+
+#theme-toggle-btn {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
 }
 
 .btn-outline:hover {
@@ -533,14 +541,10 @@ h1 {
 }
 
 .ai-badges {
-    position: absolute;
-    bottom: 0.75rem;
-    left: 0.75rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.25rem;
-    z-index: 10;
-    pointer-events: none;
+    margin-bottom: 0.5rem;
 }
 
 .badge-tag {
@@ -576,27 +580,42 @@ body.light-mode .badge-tag {
 }
 
 .card-metadata {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 1rem;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0) 100%);
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-}
-
-.meta-left {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.35rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.light-mode .card-metadata {
+    border-top-color: rgba(0, 0, 0, 0.05);
+}
+
+.meta-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    overflow: hidden;
+}
+
+.meta-split {
+    justify-content: space-between;
+}
+
+.card-filename {
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 0.5rem;
 }
 
 .mule-id {
     font-weight: 600;
     font-size: 0.875rem;
-    color: #fff;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 0.25rem;
@@ -618,11 +637,10 @@ body.light-mode .badge-tag {
 
 .file-size {
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    background: var(--bg-body);
     padding: 0.15rem 0.4rem;
     border-radius: 4px;
-    backdrop-filter: blur(4px);
 }
 
 /* Loading States */
@@ -684,6 +702,38 @@ body.light-mode .badge-tag {
     }
 }
 
+/* Settings Dashboard */
+.settings-tab-btn {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+    justify-content: flex-start;
+}
+
+.settings-tab-btn.active {
+    background: var(--accent);
+    color: white;
+    border: 1px solid var(--accent);
+}
+
+.settings-tab-btn:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary) !important;
+}
+
+body.light-mode .settings-tab-btn:hover:not(.active) {
+    background: rgba(0, 0, 0, 0.05);
+}
+
 @media (max-width: 768px) {
 
     /* Maximize horizontal screen real estate on phones */
@@ -699,25 +749,100 @@ body.light-mode .badge-tag {
         padding-bottom: 1rem;
     }
 
+    /* Stack the Settings sidebar on top of the content */
+    .settings-layout {
+        flex-direction: column !important;
+    }
+
+    .settings-layout>div:first-child {
+        flex: none !important;
+        width: 100%;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        justify-content: space-between !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 0.5rem;
+        padding-bottom: 0.5rem;
+        /* Prevent scrollbar clipping */
+    }
+
+    .settings-layout>div:nth-child(2) {
+        padding: 1rem !important;
+        width: 100%;
+    }
+
+    .settings-tab-btn {
+        flex: 1 1 auto;
+        justify-content: center !important;
+        text-align: center;
+        white-space: nowrap;
+        padding: 0.75rem 0.5rem;
+        font-size: 0.85rem;
+    }
+
+    /* Fix Grid Overflow in Settings Tabs */
+    .settings-tab {
+        padding: 1rem !important;
+    }
+
+    .settings-tab div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem !important;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .settings-tab div[style*="grid-template-columns"]>div {
+        text-align: left !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .settings-tab div[style*="grid-template-columns"]>div:first-child[style*="font-weight: 500"] {
+        /* Hide the header row text on mobile to avoid clutter since we're stacking */
+        display: none;
+    }
+
     .header-left {
         justify-content: space-between;
     }
 
-    .header-right {
+    .dashboard-actions {
+        display: flex;
+        flex-direction: row;
         flex-wrap: wrap;
-        justify-content: space-evenly;
+        justify-content: center;
         gap: 0.75rem;
     }
 
-    .header-right button {
-        flex: 1 1 calc(33% - 0.75rem);
-        padding: 0.75rem 0.5rem;
-        font-size: 0.875rem;
+    .dashboard-actions button {
+        flex: 0 0 44px;
+        width: 44px !important;
+        height: 44px !important;
+        padding: 0 !important;
+        /* Override #theme-toggle-btn specificity */
+        border-radius: var(--radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
-    /* Stack the stats banner */
+    /* Override ID padding specificity so the SVG doesn't overflow */
+    #theme-toggle-btn {
+        padding: 0 !important;
+    }
+
+    /* Hide text on header action buttons to save space on mobile */
+    .btn-text {
+        display: none;
+    }
+
+    /* Flow the stats banner next to each other */
     .stats-banner {
-        flex-direction: column;
+        flex-direction: row;
+        justify-content: space-between;
         gap: 1rem;
         padding: 1rem;
     }
