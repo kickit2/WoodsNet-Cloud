@@ -26,6 +26,7 @@ let isLoadingMore = false;
 // Map & Core Helpers
 let configMap = null;
 let configTempMarker = null;
+let configPermanentMarkers = [];
 let mainMap = null;
 let mainMarkerLayer = null;
 
@@ -919,6 +920,8 @@ dashboardBtn.addEventListener('click', () => {
     } else {
         dashboardBtn.style.color = '';
         dashboardBtn.style.borderColor = '';
+        appContent.classList.remove('hidden');
+        applySortAndRender(); // Restore main gallery
     }
 });
 
@@ -938,6 +941,8 @@ liveDashboardBtn.addEventListener('click', () => {
     } else {
         liveDashboardBtn.style.color = '';
         liveDashboardBtn.style.borderColor = '';
+        appContent.classList.remove('hidden');
+        applySortAndRender(); // Restore main gallery
     }
 });
 
@@ -957,6 +962,8 @@ mapViewBtn.addEventListener('click', () => {
     } else {
         mapViewBtn.style.color = '';
         mapViewBtn.style.borderColor = '';
+        appContent.classList.remove('hidden');
+        applySortAndRender(); // Restore main gallery
     }
 });
 
@@ -1195,9 +1202,17 @@ configBtn.addEventListener('click', () => {
     setTimeout(() => {
         if (!configMap) {
             configMap = L.map('config-map').setView([39.8283, -98.5795], 4);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+            // Default to High-Res Satellite View for deep woods deployment
+            const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            });
+            const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
-            }).addTo(configMap);
+            });
+
+            satellite.addTo(configMap);
+            L.control.layers({ "Satellite": satellite, "Streets": streets }).addTo(configMap);
 
             configMap.on('click', (e) => {
                 const lat = e.latlng.lat.toFixed(6);
@@ -1208,6 +1223,19 @@ configBtn.addEventListener('click', () => {
                 if (configTempMarker) configMap.removeLayer(configTempMarker);
                 configTempMarker = L.marker([lat, lng]).addTo(configMap);
             });
+
+            // Handle manual coordinate entry
+            const updateMapFromInputs = () => {
+                const lat = parseFloat(newMuleLatInput.value);
+                const lng = parseFloat(newMuleLngInput.value);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    if (configTempMarker) configMap.removeLayer(configTempMarker);
+                    configTempMarker = L.marker([lat, lng]).addTo(configMap);
+                    configMap.setView([lat, lng], 16);
+                }
+            };
+            newMuleLatInput.addEventListener('input', updateMapFromInputs);
+            newMuleLngInput.addEventListener('input', updateMapFromInputs);
         } else {
             // Only invalidate if the map tab is active
             const activeTab = document.querySelector('.settings-tab-btn.active');
@@ -1215,8 +1243,51 @@ configBtn.addEventListener('click', () => {
                 configMap.invalidateSize();
             }
         }
+
+        plotSavedCamerasOnMap();
     }, 100);
 });
+
+function plotSavedCamerasOnMap() {
+    if (!configMap) return;
+
+    // Clear existing permanent markers
+    configPermanentMarkers.forEach(marker => configMap.removeLayer(marker));
+    configPermanentMarkers = [];
+
+    const bounds = L.latLngBounds();
+    let hasPins = false;
+
+    // Plot all saved cameras
+    Object.keys(muleMappings).forEach(id => {
+        const data = muleMappings[id];
+        if (data && typeof data === 'object' && data.lat !== undefined && data.lng !== undefined) {
+            const name = data.name || id;
+            const marker = L.marker([data.lat, data.lng]).addTo(configMap)
+                .bindTooltip(`${id} (${name})`, { permanent: false, direction: 'top' });
+            configPermanentMarkers.push(marker);
+            bounds.extend([data.lat, data.lng]);
+            hasPins = true;
+        }
+    });
+
+    // Auto-zoom logic matching Main Dashboard
+    if (hasPins) {
+        // Calculate 0.02 mile (~100 ft) physical geographic expansion
+        const centerLat = (bounds.getSouth() + bounds.getNorth()) / 2;
+        const latBuffer = 0.02 / 69.0; // 1 degree Lat ~ 69 miles
+        const lngBuffer = 0.02 / (69.0 * Math.cos(centerLat * Math.PI / 180));
+
+        const paddedBounds = L.latLngBounds(
+            [bounds.getSouth() - latBuffer, bounds.getWest() - lngBuffer],
+            [bounds.getNorth() + latBuffer, bounds.getEast() + lngBuffer]
+        );
+        configMap.fitBounds(paddedBounds, { padding: [10, 10], maxZoom: 19 });
+    } else {
+        // Default to whole North America view if no pins exist
+        configMap.setView([39.8283, -98.5795], 4);
+    }
+}
 
 closeSettingsBtn.addEventListener('click', () => {
     settingsDashboard.classList.add('hidden');
@@ -1248,6 +1319,11 @@ document.querySelectorAll('.settings-tab-btn').forEach(btn => {
 function renderMappingsList() {
     mappingsList.innerHTML = '';
 
+    // Also trigger a map redraw whenever the list changes (deletion, etc)
+    if (typeof plotSavedCamerasOnMap === 'function') {
+        plotSavedCamerasOnMap();
+    }
+
     // Collect all known mules from mappings AND from active images
     const activeMulesFromImages = new Set(cachedImages.map(img => img.mule_id));
     const allMuleIds = new Set([...Object.keys(muleMappings), ...activeMulesFromImages]);
@@ -1255,7 +1331,10 @@ function renderMappingsList() {
     for (const id of Array.from(allMuleIds).sort()) {
         const data = muleMappings[id];
         const name = (data && typeof data === 'object') ? data.name : (data || id);
-        const loc = (data && typeof data === 'object' && data.lat) ? ` <span style="font-size:0.7rem; color:var(--text-secondary); white-space:nowrap;">(${data.lat}, ${data.lng})</span>` : '';
+        const locInputs = `
+            <input type="text" class="mule-lat-input" data-id="${id}" value="${data && data.lat ? data.lat : ''}" placeholder="Lat" style="flex: 0 1 80px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+            <input type="text" class="mule-lng-input" data-id="${id}" value="${data && data.lng ? data.lng : ''}" placeholder="Lng" style="flex: 0 1 80px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+        `;
 
         const row = document.createElement('div');
         row.style.display = 'flex';
@@ -1266,8 +1345,8 @@ function renderMappingsList() {
         row.style.gap = '0.5rem';
         row.innerHTML = `
             <strong style="min-width: 65px; font-size: 0.9rem;">${id}</strong>
-            <input type="text" class="mule-rename-input" data-id="${id}" value="${name !== id ? name : ''}" placeholder="Custom Name" style="flex:1; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
-            ${loc}
+            <input type="text" class="mule-rename-input" data-id="${id}" value="${name !== id ? name : ''}" placeholder="Custom Name" style="flex:1; min-width: 120px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+            ${locInputs}
             <button class="btn-outline" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; color: var(--error); border-color: rgba(239, 68, 68, 0.5);" onclick="removeMapping('${id}')" title="Delete Saved Mapping">X</button>
         `;
         mappingsList.appendChild(row);
@@ -1297,7 +1376,54 @@ function renderMappingsList() {
             applySortAndRender();
         });
     });
+
+    // Add event listeners for inline coordinate editing
+    document.querySelectorAll('.mule-lat-input, .mule-lng-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const id = e.target.dataset.id;
+            const isLat = e.target.classList.contains('mule-lat-input');
+            const val = parseFloat(e.target.value);
+
+            if (!isNaN(val)) {
+                if (typeof muleMappings[id] !== 'object') {
+                    muleMappings[id] = { name: muleMappings[id] || id };
+                }
+                if (isLat) {
+                    muleMappings[id].lat = val;
+                } else {
+                    muleMappings[id].lng = val;
+                }
+                if (typeof plotSavedCamerasOnMap === 'function') plotSavedCamerasOnMap();
+
+                // Snap map to the newly edited pin
+                if (muleMappings[id].lat && muleMappings[id].lng && configMap) {
+                    if (configTempMarker) configMap.removeLayer(configTempMarker);
+                    configMap.setView([muleMappings[id].lat, muleMappings[id].lng], 16);
+                }
+            } else if (e.target.value.trim() === '') {
+                // Allow clearing the coordinate
+                if (typeof muleMappings[id] === 'object') {
+                    if (isLat) delete muleMappings[id].lat;
+                    else delete muleMappings[id].lng;
+                    if (typeof plotSavedCamerasOnMap === 'function') plotSavedCamerasOnMap();
+                }
+            }
+        });
+    });
 }
+
+window.editMapping = function (id, name, lat, lng) {
+    document.getElementById('new-mule-id').value = id;
+    document.getElementById('new-mule-name').value = name;
+    document.getElementById('new-mule-lat').value = lat;
+    document.getElementById('new-mule-lng').value = lng;
+
+    if (lat && lng && configMap) {
+        if (configTempMarker) configMap.removeLayer(configTempMarker);
+        configTempMarker = L.marker([lat, lng]).addTo(configMap);
+        configMap.setView([lat, lng], 16);
+    }
+};
 
 window.removeMapping = function (id) {
     delete muleMappings[id];
@@ -1660,9 +1786,16 @@ saveGeneralBtn.addEventListener('click', async () => {
 function renderMap(images) {
     if (!mainMap) {
         mainMap = L.map('main-map').setView([39.8283, -98.5795], 4);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        });
+        const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
-        }).addTo(mainMap);
+        });
+
+        satellite.addTo(mainMap);
+        L.control.layers({ "Satellite": satellite, "Streets": streets }).addTo(mainMap);
         mainMarkerLayer = L.markerClusterGroup({
             maxClusterRadius: 50,
         }).addTo(mainMap);
@@ -1671,6 +1804,15 @@ function renderMap(images) {
     mainMarkerLayer.clearLayers();
 
     const cameraStats = {};
+
+    // Pre-populate all mapped cameras so they appear even with 0 images
+    Object.keys(muleMappings).forEach(id => {
+        const mapped = muleMappings[id];
+        if (mapped && typeof mapped === 'object' && mapped.lat !== undefined && mapped.lng !== undefined) {
+            cameraStats[id] = { count: 0, latestImage: null, bucks: 0, hunters: 0 };
+        }
+    });
+
     images.forEach(img => {
         const id = img.mule_id;
         if (!cameraStats[id]) {
@@ -1684,7 +1826,7 @@ function renderMap(images) {
             if (tags.some(t => t.includes('human') || t.includes('person'))) cameraStats[id].hunters++;
         }
 
-        if (new Date(img.timestamp) > new Date(cameraStats[id].latestImage.timestamp)) {
+        if (!cameraStats[id].latestImage || new Date(img.timestamp) > new Date(cameraStats[id].latestImage.timestamp)) {
             cameraStats[id].latestImage = img;
         }
     });
@@ -1696,38 +1838,56 @@ function renderMap(images) {
         if (loc && loc.lat && loc.lng) {
             hasValidPins = true;
             const name = getMuleName(id);
-            const thumbUrl = stats.latestImage.url;
 
             let color = '#3b82f6';
             if (stats.hunters > 0) color = '#ef4444';
             else if (stats.bucks > 0) color = '#f59e0b';
             else if (stats.count > 10) color = '#10b981';
 
+            // Check if name is too long, truncate if necessary for the pin
+            const shortName = name.length > 12 ? name.substring(0, 10) + '..' : name;
+
             const iconHtml = `
-                <div style="background-color: ${color}; width: 30px; height: 30px; border-radius: 50% 50% 50% 0; border: 2px solid #fff; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-                    <div style="transform: rotate(45deg); color: white; font-size: 11px; font-weight: 600;">${stats.count}</div>
+                <div style="background-color: ${color}; padding: 4px 8px; border-radius: 4px; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); white-space: nowrap;">
+                    <div style="color: white; font-size: 11px; font-weight: 600;">${shortName} <span style="opacity: 0.7; margin: 0 4px;">|</span> ${stats.count}</div>
                 </div>
             `;
             const customIcon = L.divIcon({
                 html: iconHtml,
                 className: '',
-                iconSize: [30, 30],
-                iconAnchor: [15, 30],
-                popupAnchor: [0, -30]
+                iconSize: [null, null], // Let DOM dictate size
+                iconAnchor: [0, 0], // Center automatically via flex
+                popupAnchor: [0, -10]
             });
             const marker = L.marker([loc.lat, loc.lng], { icon: customIcon });
 
-            const popupContent = `
-                <div style="text-align: center; min-width: 150px;">
-                    <div style="font-weight: bold; margin-bottom: 5px; color: #000;">${name}</div>
-                    <img src="${thumbUrl}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;">
-                    <div style="font-size: 0.8rem; color: #555;">
-                        Recent Activity: ${stats.count} Captures<br>
-                        ${stats.bucks > 0 ? `<span style="color: #d97706; font-weight: bold;">🦌 Bucks: ${stats.bucks}</span><br>` : ''}
-                        ${stats.hunters > 0 ? `<span style="color: #dc2626; font-weight: bold;">🚶 Humans: ${stats.hunters}</span>` : ''}
+            let popupContent = '';
+            if (stats.latestImage) {
+                const thumbUrl = stats.latestImage.url;
+                popupContent = `
+                    <div style="text-align: center; min-width: 150px;">
+                        <div style="font-weight: bold; margin-bottom: 5px; color: #000;">${name}</div>
+                        <img src="${thumbUrl}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; margin-bottom: 5px;">
+                        <div style="font-size: 0.8rem; color: #555;">
+                            Recent Activity: ${stats.count} Captures<br>
+                            ${stats.bucks > 0 ? `<span style="color: #d97706; font-weight: bold;">🦌 Bucks: ${stats.bucks}</span><br>` : ''}
+                            ${stats.hunters > 0 ? `<span style="color: #dc2626; font-weight: bold;">🚶 Humans: ${stats.hunters}</span>` : ''}
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            } else {
+                popupContent = `
+                    <div style="text-align: center; min-width: 150px; padding: 10px;">
+                        <div style="font-weight: bold; margin-bottom: 8px; color: #000;">${name}</div>
+                        <div style="background-color: #f3f4f6; padding: 15px; border-radius: 4px; border: 1px dashed #9ca3af; margin-bottom: 8px;">
+                            <span style="font-size: 1.5rem;">📡</span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: #6b7280; font-style: italic;">
+                            Awaiting first upload...
+                        </div>
+                    </div>
+                `;
+            }
 
             marker.bindPopup(popupContent);
             mainMarkerLayer.addLayer(marker);
@@ -1737,7 +1897,17 @@ function renderMap(images) {
     setTimeout(() => {
         mainMap.invalidateSize();
         if (hasValidPins) {
-            mainMap.fitBounds(mainMarkerLayer.getBounds(), { padding: [50, 50], maxZoom: 16 });
+            const bounds = mainMarkerLayer.getBounds();
+            // Calculate 0.02 mile (~100 ft) physical geographic expansion
+            const centerLat = (bounds.getSouth() + bounds.getNorth()) / 2;
+            const latBuffer = 0.02 / 69.0; // 1 degree Lat ~ 69 miles
+            const lngBuffer = 0.02 / (69.0 * Math.cos(centerLat * Math.PI / 180));
+
+            const paddedBounds = L.latLngBounds(
+                [bounds.getSouth() - latBuffer, bounds.getWest() - lngBuffer],
+                [bounds.getNorth() + latBuffer, bounds.getEast() + lngBuffer]
+            );
+            mainMap.fitBounds(paddedBounds, { padding: [10, 10], maxZoom: 19 });
         }
     }, 100);
 }
