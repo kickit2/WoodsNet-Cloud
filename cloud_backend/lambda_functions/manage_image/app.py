@@ -218,8 +218,17 @@ def lambda_handler(event, context):
                 
         elif action == 'save_alert_settings':
             subscribers = body.get('subscribers', [])
+            print(f"PAYLOAD DEBUG: {json.dumps(subscribers)}")
             try:
                 dynamodb = boto3.client('dynamodb')
+                
+                # Full Sync: first, wipe the existing Subscriber records so deleted UI cards are respected
+                existing = dynamodb.scan(TableName='WoodsNetSubscribers')
+                for item in existing.get('Items', []):
+                    dynamodb.delete_item(
+                        TableName='WoodsNetSubscribers',
+                        Key={'SubscriberID': item['SubscriberID']}
+                    )
                 for sub in subscribers:
                     
                     # Convert JS routing dict (MuleID -> [Tags]) to DynamoDB Map type
@@ -256,23 +265,33 @@ def lambda_handler(event, context):
         elif action == 'save_portal_config':
             portal_name = body.get('portal_name')
             portal_password = body.get('portal_password')
-            if not portal_name or not portal_password:
+            
+            if not portal_name and not portal_password:
                 return {
                     'statusCode': 400,
                     'headers': cors_headers,
-                    'body': json.dumps({'error': 'Missing required fields: portal_name or portal_password'})
+                    'body': json.dumps({'error': 'No config fields provided to update'})
                 }
             
             try:
                 dynamodb = boto3.client('dynamodb')
+                update_expr = []
+                expr_attrs = {}
+                
+                if portal_name:
+                    update_expr.append('PortalName = :pn')
+                    expr_attrs[':pn'] = {'S': portal_name}
+                if portal_password:
+                    update_expr.append('PortalPassword = :pp')
+                    expr_attrs[':pp'] = {'S': portal_password}
+                    
+                update_cmd = 'SET ' + ', '.join(update_expr)
+                
                 dynamodb.update_item(
                     TableName='WoodsNetNotificationPrefs',
                     Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}},
-                    UpdateExpression='SET PortalName = :pn, PortalPassword = :pp',
-                    ExpressionAttributeValues={
-                        ':pn': {'S': portal_name},
-                        ':pp': {'S': portal_password}
-                    }
+                    UpdateExpression=update_cmd,
+                    ExpressionAttributeValues=expr_attrs
                 )
                 return {
                     'statusCode': 200,

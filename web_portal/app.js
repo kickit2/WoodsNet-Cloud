@@ -134,10 +134,11 @@ async function initPortalBrand() {
     }
 }
 
-function init() {
+async function init() {
     if (AUTH_TOKEN && API_BASE_URL) {
         showApp();
-        fetchImages();
+        await fetchImages();
+        await fetchSubscribers();
     } else {
         if (AUTH_TOKEN) {
             AUTH_TOKEN = '';
@@ -332,6 +333,15 @@ async function fetchImages(loadMore = false) {
             populateMuleFilter(cachedImages);
 
             currentNextToken = data.next_token || null;
+
+            if (data.portal_name) {
+                document.title = data.portal_name;
+                const loginTitle = document.getElementById('login-portal-title');
+                const headerTitle = document.getElementById('header-portal-title');
+                if (loginTitle) loginTitle.textContent = data.portal_name;
+                if (headerTitle) headerTitle.textContent = data.portal_name;
+                if (configPortalNameInput) configPortalNameInput.value = data.portal_name;
+            }
         }
 
         applySortAndRender();
@@ -598,7 +608,7 @@ function renderLiveDashboard(images) {
 
     const uniqueMules = Object.keys(cameraStats);
     if (uniqueMules.length === 0) {
-        dashboardGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 3rem;">No active cameras found.</div>';
+        dashboardGrid.innerHTML = '<div class="stat-item" style="grid-column: 1/-1;"><p>No active cameras found in the current dataset.</p></div>';
         return;
     }
 
@@ -1315,6 +1325,8 @@ addMappingBtn.addEventListener('click', () => {
         newMuleLngInput.value = '';
         if (configTempMarker) configMap.removeLayer(configTempMarker);
         renderMappingsList();
+    } else if (id) {
+        alert("Please provide a custom Name (e.g., Wife's Stand) for this Camera ID.");
     }
 });
 
@@ -1369,7 +1381,22 @@ function renderSubscribers(subscribers) {
         card.style.cssText = 'border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; background: rgba(0,0,0,0.1); margin-bottom: 1.5rem;';
 
         let routingHtml = '';
-        const allCameras = Object.keys(muleMappings).length > 0 ? Object.keys(muleMappings) : Object.keys(sub.routing || {});
+
+        // Derive master list of cameras from currently loaded S3 images and registered custom mappings
+        const uniqueMules = new Set();
+        cachedImages.forEach(img => {
+            if (img.metadata && img.metadata.mule_id) {
+                uniqueMules.add(img.metadata.mule_id);
+            } else {
+                const filename = img.key.split('/').pop();
+                const parts = filename.split('_');
+                if (parts.length > 1 && parts[0].length > 0) {
+                    uniqueMules.add(parts[0].toUpperCase());
+                }
+            }
+        });
+        Object.keys(muleMappings).forEach(id => uniqueMules.add(id));
+        const allCameras = Array.from(uniqueMules).sort();
 
         allCameras.forEach(camId => {
             const camName = (muleMappings[camId] && muleMappings[camId].name) ? muleMappings[camId].name : camId;
@@ -1404,7 +1431,7 @@ function renderSubscribers(subscribers) {
                         <input type="checkbox" class="sub-active" ${sub.active ? 'checked' : ''}> Active
                     </label>
                 </div>
-                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
                     <div style="display:flex; flex-direction:column; gap:0.25rem;">
                         <span style="font-size:0.75rem;color:var(--text-secondary);">SMS</span>
                         <input type="text" class="sub-sms-input" value="${sub.contact_sms || ''}" placeholder="+15551234567" style="padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
@@ -1413,6 +1440,7 @@ function renderSubscribers(subscribers) {
                          <span style="font-size:0.75rem;color:var(--text-secondary);">Email</span>
                          <input type="email" class="sub-email-input" value="${sub.contact_email || ''}" placeholder="jeff@email.com" style="padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
                     </div>
+                    <button class="btn-outline delete-subscriber-btn" style="height: 33px; padding: 0 0.8rem; font-size: 0.8rem; border-color: rgba(239, 68, 68, 0.3); color: var(--error);">Delete</button>
                 </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
@@ -1425,6 +1453,17 @@ function renderSubscribers(subscribers) {
             </div>
         `;
         container.appendChild(card);
+
+        const delBtn = card.querySelector('.delete-subscriber-btn');
+        if (delBtn) {
+            delBtn.addEventListener('click', () => {
+                if (confirm('Delete this subscriber? (You must click "Save Alert Settings" after to confirm).')) {
+                    const currentDeps = buildSubscribersPayload();
+                    const updatedDeps = currentDeps.filter(s => s.id !== subId);
+                    renderSubscribers(updatedDeps);
+                }
+            });
+        }
     });
     bindLocalMacros();
 }
@@ -1460,16 +1499,18 @@ function buildSubscribersPayload() {
         const routing = {};
 
         // Find all checked tag inputs within this specific subscriber card
-        const checkedRoutes = card.querySelectorAll('.route-checkbox:checked');
-        checkedRoutes.forEach(chk => {
-            const muleId = chk.getAttribute('data-mule');
-            const tag = chk.getAttribute('data-tag');
+        const allRoutes = card.querySelectorAll('.route-checkbox');
+        allRoutes.forEach(chk => {
+            if (chk.checked) {
+                const muleId = chk.getAttribute('data-mule');
+                const tag = chk.getAttribute('data-tag');
 
-            if (!routing[muleId]) {
-                routing[muleId] = [];
-            }
-            if (tag) {
-                routing[muleId].push(tag);
+                if (!routing[muleId]) {
+                    routing[muleId] = [];
+                }
+                if (tag) {
+                    routing[muleId].push(tag);
+                }
             }
         });
 
@@ -1519,39 +1560,73 @@ if (saveAlertsBtn) {
     });
 }
 
+const saveMappingsBtn = document.getElementById('save-mappings-btn');
+if (saveMappingsBtn) {
+    saveMappingsBtn.addEventListener('click', async () => {
+        saveMappingsBtn.textContent = "Saving...";
+        saveMappingsBtn.disabled = true;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/manage-image`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${AUTH_TOKEN}`
+                },
+                body: JSON.stringify({ action: 'save_mappings', mappings: muleMappings })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            alert("Camera Dictionary successfully saved to the cloud!");
+
+            // Hydrate the rest of the UI immediately without refresh
+            if (typeof populateMuleFilter === 'function') populateMuleFilter(cachedImages);
+            if (typeof applySortAndRender === 'function') applySortAndRender();
+            if (typeof fetchSubscribers === 'function') fetchSubscribers();
+        } catch (error) {
+            console.error("Error saving camera mappings:", error);
+            alert("Failed to save camera configurations. Please check your connection.");
+        } finally {
+            saveMappingsBtn.textContent = "Save Camera Config";
+            saveMappingsBtn.disabled = false;
+        }
+    });
+}
+
 saveGeneralBtn.addEventListener('click', async () => {
     saveGeneralBtn.textContent = "Saving...";
     saveGeneralBtn.disabled = true;
 
     try {
-        const p1 = fetch(`${API_BASE_URL}/manage-image`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${AUTH_TOKEN}`
-            },
-            body: JSON.stringify({ action: 'save_mappings', mappings: muleMappings })
-        });
-
         let p2 = Promise.resolve({ ok: true });
-        if (configPortalNameInput && configPortalPasswordInput && configPortalNameInput.value) {
+        let newName = '';
+        let newPwd = '';
+
+        if (configPortalNameInput) newName = configPortalNameInput.value.trim();
+        if (configPortalPasswordInput) newPwd = configPortalPasswordInput.value.trim();
+
+        if (newName || newPwd) {
+            const payload = { action: 'save_portal_config' };
+            if (newName) payload.portal_name = newName;
+            if (newPwd) payload.portal_password = newPwd;
+
             p2 = fetch(`${API_BASE_URL}/manage-image`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${AUTH_TOKEN}`
                 },
-                body: JSON.stringify({
-                    action: 'save_portal_config',
-                    portal_name: configPortalNameInput.value.trim(),
-                    portal_password: configPortalPasswordInput.value.trim()
-                })
+                body: JSON.stringify(payload)
             });
         }
 
-        const [res1, res2] = await Promise.all([p1, p2]);
+        const res2 = await p2;
 
-        if (!res1.ok || !res2.ok) throw new Error("Save failed");
+        if (!res2.ok) throw new Error("Save failed");
+
 
         // If password was changed, update local storage
         if (configPortalPasswordInput && configPortalPasswordInput.value.trim() !== '') {

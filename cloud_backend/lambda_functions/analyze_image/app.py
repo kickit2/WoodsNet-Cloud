@@ -256,50 +256,63 @@ def lambda_handler(event, context):
             
             print(f"Successfully saved tags and state to DynamoDB for {key}")
             
-            # Trigger SNS Alerts for high-priority subjects
-            sns_topic_arn = os.environ.get('SNS_TOPIC_ARN')
-            if sns_topic_arn:
-                # Check Notification Preferences
-                prefs_table = 'WoodsNetNotificationPrefs'
-                try:
-                    prefs_response = dynamodb.get_item(
-                        TableName=prefs_table,
-                        Key={'ConfigKey': {'S': 'GLOBAL_PREFS'}}
-                    )
-                    prefs = prefs_response.get('Item', {})
-                    alert_person = prefs.get('AlertOnPerson', {'BOOL': True}).get('BOOL', True)
-                    alert_buck = prefs.get('AlertOnBuck', {'BOOL': True}).get('BOOL', True)
-                except Exception as e:
-                    print(f"Error reading prefs: {e}")
-                    alert_person = True
-                    alert_buck = True
-                    
-                should_alert = False
-                subject = ""
-                msg_body = ""
+            # Trigger targeted SNS Alerts utilizing the WoodsNetSubscribers Routing Matrix
+            try:
+                subscribers_response = dynamodb.scan(TableName='WoodsNetSubscribers')
+                subscribers = subscribers_response.get('Items', [])
                 
-                if has_person_parts and alert_person:
-                    should_alert = True
-                    subject = "🚨 Trespasser Alert"
-                    msg_body = "Woods-Net AI detected: PERSON\n"
-                elif has_buck and alert_buck:
-                    should_alert = True
-                    subject = "🦌 Target Alert"
-                    msg_body = "Woods-Net AI detected: ANTLERED BUCK\n"
+                # Determine which high-priority tags the AI actually flagged
+                active_ai_tags = []
+                if has_person_parts:
+                    active_ai_tags.append('Person')
+                if has_buck:
+                    active_ai_tags.append('Antlered Buck')
                 
-                if should_alert:
-                    msg_body += f"Camera ID: {mule_id or 'Unknown'}\n"
-                    msg_body += f"File: {key}\n"
-                    
+                if active_ai_tags:
+                    # Generate a secure 7-day presigned URL for the SMS payload
                     try:
-                        sns_client.publish(
-                            TopicArn=sns_topic_arn,
-                            Message=msg_body,
-                            Subject=subject
+                        alert_url = s3_client.generate_presigned_url(
+                            'get_object',
+                            Params={'Bucket': bucket, 'Key': key},
+                            ExpiresIn=604800
                         )
-                        print(f"SNS Alert Published for {key}")
                     except Exception as e:
-                        print(f"Failed to publish SNS alert: {e}")
+                        alert_url = f"s3://{bucket}/{key}"
+                        
+                    for sub in subscribers:
+                        # Verify the user is globally active
+                        if not sub.get('IsActive', {}).get('BOOL', True):
+                            continue
+                        
+                        # Extract the user's specific routing rules for this particular camera
+                        routing_matrix = sub.get('RoutingMatrix', {}).get('M', {})
+                        camera_id = mule_id if mule_id else 'Unknown'
+                        mule_routing = routing_matrix.get(camera_id, {}).get('L', [])
+                        
+                        user_requested_tags = [t.get('S') for t in mule_routing if 'S' in t]
+                        
+                        # See if the AI tags intersect with the User's requested tags
+                        matched_tags = list(set(active_ai_tags) & set(user_requested_tags))
+                        
+                        if matched_tags:
+                            sms_number = sub.get('ContactMethods', {}).get('M', {}).get('sms', {}).get('S', '')
+                            # AWS SNS requires E.164 format (e.g. +15551234567)
+                            if sms_number and sms_number.startswith('+'):
+                                tag_str = " & ".join(matched_tags).upper()
+                                msg_body = f"🚨 Woods-Net Alert 🚨\n{tag_str} detected at {camera_id}!\n\nView Image:\n{alert_url}"
+                                
+                                try:
+                                    # Dispatch personalized SMS directly to the user's phone
+                                    sns_client.publish(
+                                        PhoneNumber=sms_number,
+                                        Message=msg_body
+                                    )
+                                    sub_name = sub.get('Name', {}).get('S', 'Unknown')
+                                    print(f"Targeted SMS delivered to {sub_name} ({sms_number}) for {camera_id}")
+                                except Exception as e:
+                                    print(f"Failed to publish direct SMS to {sms_number}: {e}")
+            except Exception as e:
+                print(f"Error processing dynamic subscriber alerts: {e}")
             
     except Exception as e:
         print(f"Error processing S3 Event: {e}")

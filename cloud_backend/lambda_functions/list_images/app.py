@@ -123,8 +123,19 @@ def lambda_handler(event, context):
                 except Exception as e:
                     print(f"Error fetching AI tags from DynamoDB: {e}")
                     
-            # Fetch Mule Hardware States from DynamoDB
-            unique_mules = list(set([obj['Key'].split('/')[2] for obj in response.get('Contents', []) if len(obj['Key'].split('/')) >= 3 and not obj['Key'].endswith('/')]))
+            # Fetch Camera Hardware States from DynamoDB
+            unique_mules_set = set()
+            for obj in response.get('Contents', []):
+                k = obj['Key']
+                if len(k.split('/')) >= 3 and not k.endswith('/'):
+                    fname = k.split('/')[-1]
+                    fparts = fname.split('_')
+                    if len(fparts) > 1 and len(fparts[0]) > 0:
+                        unique_mules_set.add(fparts[0].upper())
+                    else:
+                        unique_mules_set.add(k.split('/')[2])
+            unique_mules = list(unique_mules_set)
+            
             if unique_mules:
                 dynamodb = boto3.client('dynamodb')
                 table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
@@ -161,10 +172,15 @@ def lambda_handler(event, context):
                 if key.endswith('/'): 
                     continue
                     
-                # Extract metadata from the key (e.g. woods-net/mules/MULE05/IMG0004.avif)
+                # Extract metadata. Prefer filename prefix (e.g., 0A0038_IMAG0027.AVIF) over S3 directory structure
                 parts = key.split('/')
-                mule_id = parts[2] if len(parts) >= 3 else "Unknown"
                 filename = parts[-1]
+                
+                fparts = filename.split('_')
+                if len(fparts) > 1 and len(fparts[0]) > 0:
+                    mule_id = fparts[0].upper()
+                else:
+                    mule_id = parts[2] if len(parts) >= 3 else "Unknown"
                 
                 # Generate a short-lived URL (1 hour) so the browser can securely download the image
                 presigned_url = s3_client.generate_presigned_url(
