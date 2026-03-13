@@ -99,6 +99,18 @@
                     <div style="margin-top: 2rem;">
                         <button id="save-general-btn">Save General Settings</button>
                     </div>
+
+                    <hr style="margin: 2rem 0; border: none; border-top: 1px solid rgba(255,255,255,0.1);">
+
+                    <div>
+                        <h3 style="margin-bottom: 0.5rem; color: var(--error);">System Integrity Recovery</h3>
+                        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.875rem;">If an image
+                            fails to process during upload (missing AI tags), click this to forcefully scan the bucket
+                            and reconstruct missing database records.</p>
+                        <button id="force-ai-btn"
+                            style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.5); color: var(--error);">FORCE
+                            AI PROCESS</button>
+                    </div>
                 </div>
 
                 <!-- Fleet Management Tab -->
@@ -112,13 +124,13 @@
                     </div>
 
                     <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-                        <input type="text" id="new-mule-id" placeholder="Camera ID"
+                        <input type="text" id="new-camera-id" placeholder="Camera ID"
                             style="flex: 1 1 100px; min-width: 0;">
-                        <input type="text" id="new-mule-name" placeholder="Name (e.g. Tree Stand)"
+                        <input type="text" id="new-camera-name" placeholder="Name (e.g. Tree Stand)"
                             style="flex: 2 1 150px; min-width: 0;">
-                        <input type="text" id="new-mule-lat" placeholder="Latitude"
+                        <input type="text" id="new-camera-lat" placeholder="Latitude"
                             style="flex: 1; font-size: 0.8rem; min-width: 0;">
-                        <input type="text" id="new-mule-lng" placeholder="Longitude"
+                        <input type="text" id="new-camera-lng" placeholder="Longitude"
                             style="flex: 1; font-size: 0.8rem; min-width: 0;">
                         <button id="add-mapping-btn" class="btn-outline" style="flex: 1; padding: 0.75rem 0.5rem;">Add
                             Cam</button>
@@ -256,13 +268,23 @@
                 </div>
                 <div class="stat-item loading-pulse">
                     <span class="stat-label">Active Cameras</span>
-                    <span id="active-mules" class="stat-value">--</span>
+                    <span id="active-cameras" class="stat-value">--</span>
                 </div>
             </div>
 
             <div id="live-dashboard" class="live-dashboard hidden">
-                <div class="dashboard-grid" id="dashboard-grid">
-                    <!-- Cards injected via JS -->
+                <h3
+                    style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    Cameras</h3>
+                <div class="dashboard-grid" id="cameras-grid" style="margin-bottom: 2rem;">
+                    <!-- Camera Cards injected via JS -->
+                </div>
+
+                <h3
+                    style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    Mule Fleet</h3>
+                <div class="dashboard-grid" id="mules-grid">
+                    <!-- Mule Cards injected via JS -->
                 </div>
             </div>
 
@@ -278,13 +300,7 @@
             <div id="toolbar" class="toolbar hidden">
                 <div class="toolbar-left">
                     <button class="btn-outline" id="toggle-select-mode-btn">Select Items</button>
-                    <button class="btn-outline" id="generate-timelapse-btn" title="Create MP4 Timelapse for a Camera">
-                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2"
-                            fill="none">
-                            <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                        </svg>
-                    </button>
+
                     <div id="bulk-actions" class="hidden">
                         <span id="selected-count">0 selected</span>
                         <button class="btn-outline" id="bulk-download-btn">Download</button>
@@ -299,8 +315,8 @@
                         <input type="date" id="end-date" class="sort-dropdown" title="End Date">
                     </div>
 
-                    <label for="mule-filter" class="sort-label">Camera:</label>
-                    <select id="mule-filter" class="sort-dropdown" style="min-width: 140px;">
+                    <label for="camera-filter" class="sort-label">Camera:</label>
+                    <select id="camera-filter" class="sort-dropdown" style="min-width: 140px;">
                         <option value="all">All Cameras</option>
                     </select>
 
@@ -377,7 +393,7 @@
         </main>
     </div>
 
-    <script src="app.js?v=36"></script>
+    <script src="app.js?v=39"></script>
 </body>
 
 </html>

@@ -28,6 +28,15 @@ def lambda_handler(event, context):
                     expected_token = item['PortalPassword']['S']
                 notification_prefs['alert_person'] = item.get('AlertOnPerson', {}).get('BOOL', True)
                 notification_prefs['alert_buck'] = item.get('AlertOnBuck', {}).get('BOOL', True)
+                
+            lock_response = dynamodb.get_item(
+                TableName='WoodsNetNotificationPrefs',
+                Key={'ConfigKey': {'S': 'AI_PROCESSING_LOCK'}}
+            )
+            if 'Item' in lock_response:
+                notification_prefs['force_ai_lock_timestamp'] = int(lock_response['Item'].get('Timestamp', {}).get('N', 0))
+            else:
+                notification_prefs['force_ai_lock_timestamp'] = 0
         except Exception as e:
             print(f"Error fetching portal config from DynamoDB: {e}")
 
@@ -56,13 +65,13 @@ def lambda_handler(event, context):
         s3_client = boto3.client('s3')
         images = []
         next_token = None
-        mule_mappings = {}
-        mule_status = {}
+        camera_mappings = {}
+        camera_mappings = {}
         
-        # Fetch Mule Name Mappings
+        # Fetch Camera Name Mappings
         try:
-            mapping_obj = s3_client.get_object(Bucket=bucket_name, Key='_config/mule_mappings.json')
-            mule_mappings = json.loads(mapping_obj['Body'].read().decode('utf-8'))
+            mapping_obj = s3_client.get_object(Bucket=bucket_name, Key='_config/camera_mappings.json')
+            camera_mappings = json.loads(mapping_obj['Body'].read().decode('utf-8'))
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchKey':
                 print(f"Error fetching mappings config: {e}")
@@ -73,7 +82,7 @@ def lambda_handler(event, context):
         
         list_kwargs = {
             'Bucket': bucket_name,
-            'Prefix': 'woods-net/mules/',
+            'Prefix': 'woods-net/cameras/',
             'MaxKeys': 100
         }
         if continuation_token:
@@ -123,44 +132,7 @@ def lambda_handler(event, context):
                 except Exception as e:
                     print(f"Error fetching AI tags from DynamoDB: {e}")
                     
-            # Fetch Camera Hardware States from DynamoDB
-            unique_mules_set = set()
-            for obj in response.get('Contents', []):
-                k = obj['Key']
-                if len(k.split('/')) >= 3 and not k.endswith('/'):
-                    fname = k.split('/')[-1]
-                    fparts = fname.split('_')
-                    if len(fparts) > 1 and len(fparts[0]) > 0:
-                        unique_mules_set.add(fparts[0].upper())
-                    else:
-                        unique_mules_set.add(k.split('/')[2])
-            unique_mules = list(unique_mules_set)
-            
-            if unique_mules:
-                dynamodb = boto3.client('dynamodb')
-                table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
-                state_keys = [{'ImageKey': {'S': f"MULE_STATE#{mid}"}} for mid in unique_mules]
-                
-                # BatchGetItem supports up to 100 items, and we have ~few unique mules.
-                try:
-                    state_response = dynamodb.batch_get_item(
-                        RequestItems={
-                            table_name: {
-                                'Keys': state_keys,
-                                'AttributesToGet': ['ImageKey', 'LastHeartbeat', 'Battery', 'Signal', 'PowerLevel']
-                            }
-                        }
-                    )
-                    for item in state_response.get('Responses', {}).get(table_name, []):
-                        m_id = item['ImageKey']['S'].split('#')[1]
-                        mule_status[m_id] = {
-                            'last_heartbeat': item.get('LastHeartbeat', {}).get('S'),
-                            'battery': item.get('Battery', {}).get('N'),
-                            'signal': item.get('Signal', {}).get('N'),
-                            'power_level': item.get('PowerLevel', {}).get('S')
-                        }
-                except Exception as e:
-                    print(f"Error fetching mule statuses: {e}")
+        
                     
             # Sort by LastModified, newest first
             sorted_contents = sorted(response['Contents'], key=lambda obj: obj['LastModified'], reverse=True)
@@ -178,9 +150,9 @@ def lambda_handler(event, context):
                 
                 fparts = filename.split('_')
                 if len(fparts) > 1 and len(fparts[0]) > 0:
-                    mule_id = fparts[0].upper()
+                    camera_id = fparts[0].upper()
                 else:
-                    mule_id = parts[2] if len(parts) >= 3 else "Unknown"
+                    camera_id = parts[2] if len(parts) >= 3 else "Unknown"
                 
                 # Generate a short-lived URL (1 hour) so the browser can securely download the image
                 presigned_url = s3_client.generate_presigned_url(
@@ -201,7 +173,7 @@ def lambda_handler(event, context):
                 
                 images.append({
                     'key': key,
-                    'mule_id': mule_id,
+                    'camera_id': camera_id,
                     'filename': filename,
                     'size_bytes': obj['Size'],
                     'timestamp': timestamp_str, 
@@ -221,7 +193,7 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Headers': 'Authorization'
             },
-            'body': json.dumps({'images': images, 'mule_mappings': mule_mappings, 'mule_status': mule_status, 'notification_prefs': notification_prefs, 'next_token': next_token, 'portal_name': portal_name})
+            'body': json.dumps({'images': images, 'camera_mappings': camera_mappings, 'notification_prefs': notification_prefs, 'next_token': next_token, 'portal_name': portal_name})
         }
 
     except ClientError as e:

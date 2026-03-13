@@ -3,6 +3,8 @@
 Mostly for internal use, so prototypes can change between versions.
 """
 
+from __future__ import annotations
+
 import builtins
 import re
 from dataclasses import dataclass
@@ -87,7 +89,7 @@ LIBHEIF_CHROMA_MAP = {
 def save_colorspace_chroma(c_image, info: dict) -> None:
     """Converts `chroma` value from `c_image` to useful values and stores them in ``info`` dict."""
     # Saving of `colorspace` was removed, as currently is not clear where to use that value.
-    chroma = LIBHEIF_CHROMA_MAP.get(c_image.chroma)
+    chroma = LIBHEIF_CHROMA_MAP.get(c_image.chroma, None)
     if chroma is not None:
         info["chroma"] = chroma
 
@@ -363,7 +365,7 @@ class CtxEncode:
         enc_params = kwargs.get("enc_params", {})
         chroma = None
         if "subsampling" in kwargs:
-            chroma = SUBSAMPLING_CHROMA_MAP.get(kwargs["subsampling"])
+            chroma = SUBSAMPLING_CHROMA_MAP.get(kwargs["subsampling"], None)
         if chroma is None:
             chroma = kwargs.get("chroma")
         if chroma:
@@ -413,10 +415,6 @@ class CtxEncode:
                     for i in ("color_primaries", "transfer_characteristics", "matrix_coefficients", "full_range_flag")
                 ]
             )
-        # set pixel aspect ratio
-        pixel_aspect_ratio = kwargs.get("pixel_aspect_ratio")
-        if pixel_aspect_ratio:
-            im_out.set_pixel_aspect_ratio(pixel_aspect_ratio[0], pixel_aspect_ratio[1])
         # encode
         image_orientation = kwargs.get("image_orientation", 1)
         im_out.encode(
@@ -473,7 +471,6 @@ class MimCImage:
         self.primary = False
         self.chroma = HeifChroma.UNDEFINED.value
         self.colorspace = HeifColorspace.UNDEFINED.value
-        self.pixel_aspect_ratio = None
         self.camera_intrinsic_matrix = None
         self.camera_extrinsic_matrix_rot = None
 

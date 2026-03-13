@@ -45,15 +45,28 @@ def lambda_handler(event, context):
     table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
     
     try:
-        # The S3 event payload can contain multiple records
-        for record in event.get('Records', []):
+        # 1. Flatten Event Structure (Handle SQS wrapping)
+        s3_records = []
+        for raw_record in event.get('Records', []):
+            if 'body' in raw_record:
+                # SQS Wrapper
+                try:
+                    body_json = json.loads(raw_record['body'])
+                    s3_records.extend(body_json.get('Records', []))
+                except Exception as e:
+                    print(f"Failed to decode SQS JSON wrapper: {e}")
+            elif 's3' in raw_record:
+                s3_records.append(raw_record)
+                
+        # 2. Process flattened records
+        for record in s3_records:
             bucket = record['s3']['bucket']['name']
-            # S3 keys in the event are URL encoded
             key = urllib.parse.unquote_plus(record['s3']['object']['key'])
+            print(f"RAW PAYLOAD KEY EVALUATION: {key}")
             
-            # We only care about .avif images in the mules directory.
+            # We only care about .avif images in the cameras directory.
             # Avoid processing the _config mappings file or UI assets if any.
-            if not key.startswith('woods-net/mules/') or not key.lower().endswith('.avif'):
+            if not (key.startswith('woods-net/cameras/') and key.lower().endswith('.avif')):
                 print(f"Skipping analysis for non-capture file: {key}")
                 continue
                 
@@ -63,7 +76,7 @@ def lambda_handler(event, context):
             weather_data = None
             if mule_id:
                 try:
-                    mapping_obj = s3_client.get_object(Bucket=bucket, Key='_config/mule_mappings.json')
+                    mapping_obj = s3_client.get_object(Bucket=bucket, Key='_config/camera_mappings.json')
                     mule_mappings = json.loads(mapping_obj['Body'].read().decode('utf-8'))
                     mule_info = mule_mappings.get(mule_id)
                     if isinstance(mule_info, dict) and 'lat' in mule_info and 'lng' in mule_info:
@@ -113,7 +126,7 @@ def lambda_handler(event, context):
             response = rekognition.detect_labels(
                 Image={'Bytes': jpeg_bytes},
                 MaxLabels=15,
-                MinConfidence=75
+                MinConfidence=80
             )
             # --- END AVIF CONVERSION LOGIC ---
             labels = response.get('Labels', [])
@@ -129,6 +142,7 @@ def lambda_handler(event, context):
             has_person_parts = False # Tracks if we found *any* human attributes
             has_animals = False
             has_buck = False
+            has_doe = False
             detected_tags = {}
             
             for label in labels:
@@ -136,6 +150,8 @@ def lambda_handler(event, context):
                 
                 # Check if this tag belongs to an allowed category
                 label_categories = [cat['Name'] for cat in label.get('Categories', [])]
+                label_name = label.get('Name', 'Unknown')
+                
                 if not any(c in allowed_categories for c in label_categories):
                     continue # Ignore Weather, Plants, Furniture, Scenery, etc.
                     
@@ -156,6 +172,21 @@ def lambda_handler(event, context):
                     if label_name in ['Animal', 'Wildlife', 'Mammal', 'Antler', 'Horn']:
                         continue 
                         
+                    # Normalize errant ML labels to target wildlife group
+                    normalization_map = {
+                        'Kangaroo': 'Deer',
+                        'Antelope': 'Deer',
+                        'Elk': 'Deer',
+                        'Pig': 'Deer',
+                        'Cow': 'Deer',
+                        'Impala': 'Deer',
+                        'Moose': 'Deer',
+                        'Reindeer': 'Deer',
+                        'Cattle': 'Deer'
+                    }
+                    if label_name in normalization_map:
+                        label_name = normalization_map[label_name]
+
                     # Custom logic for Deer sexing based on user request
                     if label_name == 'Deer':
                         if has_antlers:
@@ -163,28 +194,22 @@ def lambda_handler(event, context):
                             has_buck = True
                         else:
                             label_name = 'Doe/Young'
+                            has_doe = True
+                    else:
+                        label_name = 'Other Wildlife'
                 
-                # If there are bounding boxes (Instances), we count them.
-                count = len(label.get('Instances', []))
-                if count > 0:
-                    detected_tags[label_name] = count
-                else:
-                    detected_tags[label_name] = 1
+                # All detected tags are strictly tracked as Boolean '1' flags without mathematical volume.
+                detected_tags[label_name] = 1
             
             # --- Final Tag Consolidation ---
             # If we saw ANY human attributes (Face, Male, Shirt, etc), we consolidate them all into exactly one "Person" tag.
             if has_person_parts:
-                # We count the actual number of 'Person' instances Rekognition found, or default to 1
-                person_count = 1
-                for l in labels:
-                    if l['Name'] == 'Person' and len(l.get('Instances', [])) > 0:
-                        person_count = len(l['Instances'])
-                        break
-                detected_tags['Person'] = person_count
+                # We don't care about counting people, just if one was broadly detected.
+                detected_tags['Person'] = 1
                 
             # If no specific tags were found, but we flagged "Animal", ensure we at least record that.
             if has_animals and not detected_tags:
-                detected_tags["Unknown Wildlife"] = 1
+                detected_tags["Other Wildlife"] = 1
                 
             # Second Pass: AWS Rekognition Custom Labels (Target Buck / Age Estimation)
             # This only runs if the user has trained a specific model and provided the ARN, AND a buck was detected.
@@ -267,6 +292,8 @@ def lambda_handler(event, context):
                     active_ai_tags.append('Person')
                 if has_buck:
                     active_ai_tags.append('Antlered Buck')
+                if has_doe:
+                    active_ai_tags.append('Doe/Young')
                 
                 if active_ai_tags:
                     # Generate a secure 7-day presigned URL for the SMS payload

@@ -16,8 +16,8 @@ window.addEventListener('unhandledrejection', function (e) {
 let API_BASE_URL = localStorage.getItem('woods_api_url') || 'https://iwsscp4o5f.execute-api.us-east-1.amazonaws.com';
 let AUTH_TOKEN = localStorage.getItem('woods_auth_token') || '';
 let cachedImages = [];
-let muleMappings = {};
-let muleStatus = {};
+let cameraMappings = {};
+
 let isSelectMode = false;
 let selectedKeys = new Set();
 let currentNextToken = null;
@@ -30,15 +30,15 @@ let configPermanentMarkers = [];
 let mainMap = null;
 let mainMarkerLayer = null;
 
-function getMuleName(id) {
-    if (!muleMappings[id]) return id;
-    if (typeof muleMappings[id] === 'object') return muleMappings[id].name;
-    return muleMappings[id];
+function getCameraName(id) {
+    if (!cameraMappings[id]) return id;
+    if (typeof cameraMappings[id] === 'object') return cameraMappings[id].name;
+    return cameraMappings[id];
 }
 
-function getMuleLocation(id) {
-    if (muleMappings[id] && typeof muleMappings[id] === 'object') {
-        return { lat: muleMappings[id].lat, lng: muleMappings[id].lng };
+function getCameraLocation(id) {
+    if (cameraMappings[id] && typeof cameraMappings[id] === 'object') {
+        return { lat: cameraMappings[id].lat, lng: cameraMappings[id].lng };
     }
     return null;
 }
@@ -74,19 +74,18 @@ const mapViewBtn = document.getElementById('map-view-btn');
 const mainMapContainer = document.getElementById('main-map-container');
 
 const totalCountEl = document.getElementById('total-count');
-const activeMulesEl = document.getElementById('active-mules');
+const activeCamerasEl = document.getElementById('active-cameras');
 
 const toolbar = document.getElementById('toolbar');
 const sortSelect = document.getElementById('sort-select');
 const toggleSelectModeBtn = document.getElementById('toggle-select-mode-btn');
-const generateTimelapseBtn = document.getElementById('generate-timelapse-btn');
 const bulkActions = document.getElementById('bulk-actions');
 const selectedCountEl = document.getElementById('selected-count');
 const bulkDownloadBtn = document.getElementById('bulk-download-btn');
 const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
 const startDateInput = document.getElementById('start-date');
 const endDateInput = document.getElementById('end-date');
-const muleFilter = document.getElementById('mule-filter');
+const cameraFilter = document.getElementById('camera-filter');
 const aiFilterCheckboxes = document.querySelectorAll('.ai-filter-cb');
 const aiSearchInput = document.getElementById('ai-search');
 
@@ -97,13 +96,14 @@ const settingsTabBtns = document.querySelectorAll('.settings-tab-btn');
 const settingsTabs = document.querySelectorAll('.settings-tab');
 const mappingsList = document.getElementById('mappings-list');
 const addMappingBtn = document.getElementById('add-mapping-btn');
-const newMuleIdInput = document.getElementById('new-mule-id');
-const newMuleNameInput = document.getElementById('new-mule-name');
-const newMuleLatInput = document.getElementById('new-mule-lat');
-const newMuleLngInput = document.getElementById('new-mule-lng');
+const newCameraIdInput = document.getElementById('new-camera-id');
+const newCameraNameInput = document.getElementById('new-camera-name');
+const newCameraLatInput = document.getElementById('new-camera-lat');
+const newCameraLngInput = document.getElementById('new-camera-lng');
 const saveGeneralBtn = document.getElementById('save-general-btn');
 const configPortalNameInput = document.getElementById('config-portal-name');
 const configPortalPasswordInput = document.getElementById('config-portal-password');
+const forceAiBtn = document.getElementById('force-ai-btn');
 
 // Initialize
 const savedTheme = localStorage.getItem('woods_theme') || 'dark';
@@ -184,8 +184,15 @@ authForm.addEventListener('submit', async (e) => {
             localStorage.setItem('woods_auth_token', pwd);
             const data = await response.json();
             cachedImages = data.images || [];
-            muleMappings = data.mule_mappings || {};
-            muleStatus = data.mule_status || {};
+            cameraMappings = data.camera_mappings || {};
+
+
+            let prefs = data.notification_prefs || {};
+            let aiLockEpoch = prefs.force_ai_lock_timestamp || 0;
+            const nowEpoch = Math.floor(Date.now() / 1000);
+            if (nowEpoch - aiLockEpoch < 300) {
+                lockForceAiBtn(300 - (nowEpoch - aiLockEpoch));
+            }
 
             if (data.portal_name) {
                 document.title = data.portal_name;
@@ -228,37 +235,21 @@ const macroClear = document.getElementById('macro-clear-all');
 if (macroDeer) {
     macroDeer.addEventListener('click', (e) => {
         e.preventDefault();
-        // Reaching into the DOM structure next to the Macros for the camera rows
-        // The routing list is directly adjacent to the Global Macros div
-        const routingContainer = macroDeer.parentElement.parentElement;
-        const checkboxes = routingContainer.querySelectorAll('label');
-        checkboxes.forEach(label => {
-            if (label.textContent.includes('Buck Alerts')) {
-                label.querySelector('input').checked = true;
-            }
-        });
+        document.querySelectorAll('.route-checkbox[data-tag="Antlered Buck"], .route-checkbox[data-tag="Doe/Young"]').forEach(chk => chk.checked = true);
     });
 }
 
 if (macroPeople) {
     macroPeople.addEventListener('click', (e) => {
         e.preventDefault();
-        const routingContainer = macroPeople.parentElement.parentElement;
-        const checkboxes = routingContainer.querySelectorAll('label');
-        checkboxes.forEach(label => {
-            if (label.textContent.includes('People Alerts')) {
-                label.querySelector('input').checked = true;
-            }
-        });
+        document.querySelectorAll('.route-checkbox[data-tag="Person"]').forEach(chk => chk.checked = true);
     });
 }
 
 if (macroClear) {
     macroClear.addEventListener('click', (e) => {
         e.preventDefault();
-        const routingContainer = macroClear.parentElement.parentElement;
-        const checkboxes = routingContainer.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach(checkbox => checkbox.checked = false);
+        document.querySelectorAll('.route-checkbox').forEach(chk => chk.checked = false);
     });
 }
 
@@ -329,9 +320,17 @@ async function fetchImages(loadMore = false) {
             isLoadingMore = false;
         } else {
             cachedImages = data.images || [];
-            muleMappings = data.mule_mappings || {};
-            muleStatus = data.mule_status || {};
-            populateMuleFilter(cachedImages);
+            cameraMappings = data.camera_mappings || {};
+
+
+            let prefs = data.notification_prefs || {};
+            let aiLockEpoch = prefs.force_ai_lock_timestamp || 0;
+            const nowEpoch = Math.floor(Date.now() / 1000);
+            if (nowEpoch - aiLockEpoch < 300) {
+                lockForceAiBtn(300 - (nowEpoch - aiLockEpoch));
+            }
+
+            populateCameraFilter(cachedImages);
 
             currentNextToken = data.next_token || null;
 
@@ -361,21 +360,21 @@ async function fetchImages(loadMore = false) {
     }
 }
 
-function populateMuleFilter(images) {
-    if (!muleFilter) return;
-    const uniqueMules = [...new Set(images.map(img => img.mule_id))].sort((a, b) => getMuleName(a).localeCompare(getMuleName(b)));
+function populateCameraFilter(images) {
+    if (!cameraFilter) return;
+    const uniqueCameras = [...new Set(images.map(img => img.camera_id))].sort((a, b) => getCameraName(a).localeCompare(getCameraName(b)));
 
-    const currentSelection = muleFilter.value;
-    muleFilter.innerHTML = '<option value="all">All Cameras</option>';
-    uniqueMules.forEach(id => {
+    const currentSelection = cameraFilter.value;
+    cameraFilter.innerHTML = '<option value="all">All Cameras</option>';
+    uniqueCameras.forEach(id => {
         const option = document.createElement('option');
         option.value = id;
-        option.textContent = getMuleName(id);
-        muleFilter.appendChild(option);
+        option.textContent = getCameraName(id);
+        cameraFilter.appendChild(option);
     });
 
-    if (uniqueMules.includes(currentSelection)) {
-        muleFilter.value = currentSelection;
+    if (uniqueCameras.includes(currentSelection)) {
+        cameraFilter.value = currentSelection;
     }
 }
 
@@ -397,8 +396,8 @@ function applySortAndRender() {
 
     // Filter
     let filteredImages = cachedImages.filter(img => {
-        if (muleFilter && muleFilter.value !== 'all') {
-            if (img.mule_id !== muleFilter.value) return false;
+        if (cameraFilter && cameraFilter.value !== 'all') {
+            if (img.camera_id !== cameraFilter.value) return false;
         }
 
         const imgDate = new Date(img.timestamp);
@@ -451,7 +450,7 @@ function applySortAndRender() {
         } else if (sortBy === 'oldest') {
             return new Date(a.timestamp) - new Date(b.timestamp);
         } else if (sortBy === 'camera-asc') {
-            return a.mule_id.localeCompare(b.mule_id);
+            return a.camera_id.localeCompare(b.camera_id);
         } else if (sortBy === 'name-asc') {
             return a.filename.localeCompare(b.filename);
         }
@@ -529,7 +528,7 @@ function renderCharts(images) {
         else if (hasOther || (img.ai_data && img.ai_data.has_animals)) dateCounts[dateStr].other++;
         else dateCounts[dateStr].empty++;
 
-        const cName = getMuleName(img.mule_id);
+        const cName = getCameraName(img.camera_id);
         cameraCounts[cName] = (cameraCounts[cName] || 0) + 1;
     });
 
@@ -592,12 +591,17 @@ function renderCharts(images) {
 }
 
 function renderLiveDashboard(images) {
-    dashboardGrid.innerHTML = '';
+    const camerasGrid = document.getElementById('cameras-grid');
+    const mulesGrid = document.getElementById('mules-grid');
+    if (!camerasGrid || !mulesGrid) return;
 
-    // Calculate per-mule stats from images (acting as offline fallback if muleStatus is missing)
+    camerasGrid.innerHTML = '';
+    mulesGrid.innerHTML = '';
+
+    // Calculate per-camera stats from images
     const cameraStats = {};
     images.forEach(img => {
-        const id = img.mule_id;
+        const id = img.camera_id;
         if (!cameraStats[id]) {
             cameraStats[id] = { count: 0, latestImage: img };
         }
@@ -607,88 +611,100 @@ function renderLiveDashboard(images) {
         }
     });
 
-    const uniqueMules = Object.keys(cameraStats);
-    if (uniqueMules.length === 0) {
-        dashboardGrid.innerHTML = '<div class="stat-item" style="grid-column: 1/-1;"><p>No active cameras found in the current dataset.</p></div>';
-        return;
+    const uniqueCameras = Object.keys(cameraStats);
+
+    // --- Render Cameras Stack ---
+    if (uniqueCameras.length === 0) {
+        camerasGrid.innerHTML = '<div class="stat-item" style="grid-column: 1/-1;"><p>No active cameras found in the current dataset.</p></div>';
+    } else {
+        const docFragCam = document.createDocumentFragment();
+        uniqueCameras.forEach(id => {
+            const stats = cameraStats[id];
+            const lastHeartbeat = new Date(stats.latestImage.timestamp);
+
+            const hoursAgo = (new Date() - lastHeartbeat) / (1000 * 60 * 60);
+            let healthClass = 'healthy';
+            if (hoursAgo > 24) healthClass = 'offline';
+            else if (hoursAgo > 12) healthClass = 'warning';
+
+            const hbDisplay = lastHeartbeat.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+                lastHeartbeat.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const battery = '--'; // Physical cameras lack remote telemetry right now
+
+            const card = document.createElement('div');
+            card.className = 'status-card';
+            card.onclick = () => {
+                if (!liveDashboard.classList.contains('hidden')) {
+                    liveDashboardBtn.click();
+                }
+            };
+
+            card.innerHTML = `
+                <div class="status-header">
+                    <div class="status-title">
+                        <div class="status-indicator ${healthClass}"></div>
+                        ${getCameraName(id)}
+                        <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-secondary);">(${id})</span>
+                    </div>
+                    <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${healthClass.toUpperCase()}</div>
+                </div>
+                <div class="status-details">
+                    <div class="detail-row">
+                        <span style="color: var(--text-secondary);">Latest Image</span>
+                        <span>${hbDisplay}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span style="color: var(--text-secondary);">Recent Captures</span>
+                        <span>${stats.count}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span style="color: var(--text-secondary);">Battery</span>
+                        <span>${battery}</span>
+                    </div>
+                </div>
+            `;
+            docFragCam.appendChild(card);
+        });
+        camerasGrid.appendChild(docFragCam);
     }
 
-    const docFrag = document.createDocumentFragment();
+    // --- Render Mule Hardware Network Stack (Stubbed placeholders for Phase 15 MVP) ---
+    const stubbedMules = [
+        { id: "MULE01", signal: "Unknown", battery: "Unknown" },
+        { id: "BASE", signal: "--", battery: "12.4V" } // Faux Base has stable power
+    ];
 
-    uniqueMules.forEach(id => {
-        const stats = cameraStats[id];
-        const statusData = muleStatus[id] || {};
-
-        let lastHeartbeatStr = statusData.last_heartbeat || stats.latestImage.timestamp;
-        const lastHeartbeat = new Date(lastHeartbeatStr);
-
-        // Calculate age
-        const hoursAgo = (new Date() - lastHeartbeat) / (1000 * 60 * 60);
-        let healthClass = 'healthy';
-        if (hoursAgo > 24) healthClass = 'offline';
-        else if (hoursAgo > 12) healthClass = 'warning';
-
-        const hbDisplay = lastHeartbeat.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
-            lastHeartbeat.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        const battery = statusData.battery || '--';
-        const signal = statusData.signal || '--';
-        const pl = statusData.power_level ? statusData.power_level.replace('PL', '') : '?';
-
+    const docFragMule = document.createDocumentFragment();
+    stubbedMules.forEach(mule => {
         const card = document.createElement('div');
         card.className = 'status-card';
-        card.onclick = () => {
-            // For MVP, just close dashboard to show gallery
-            if (!liveDashboard.classList.contains('hidden')) {
-                liveDashboardBtn.click();
-            }
-        };
-
         card.innerHTML = `
             <div class="status-header">
                 <div class="status-title">
-                    <div class="status-indicator ${healthClass}"></div>
-                    ${getMuleName(id)}
-                    <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-secondary);">(${id})</span>
+                    <div class="status-indicator offline"></div>
+                    ${mule.id}
                 </div>
-                <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">${healthClass.toUpperCase()}</div>
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">UNKNOWN</div>
             </div>
-            
-            <div class="status-metrics">
-                <div class="metric">
-                    <span class="metric-label">Last Check-in</span>
-                    <span class="metric-value">
-                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                        <span style="font-size:0.85rem">${hbDisplay}</span>
-                    </span>
+            <div class="status-details">
+                <div class="detail-row">
+                    <span style="color: var(--text-secondary);">Last Check-in</span>
+                    <span>Unknown</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label">Battery / Power</span>
-                    <span class="metric-value">
-                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="1" y="6" width="18" height="12" rx="2" ry="2"></rect><line x1="23" y1="13" x2="23" y2="11"></line></svg>
-                        ${battery}% <span style="font-size: 0.75rem; color: var(--text-secondary);">(PL${pl})</span>
-                    </span>
+                <div class="detail-row">
+                    <span style="color: var(--text-secondary);">Signal (RSSI)</span>
+                    <span>${mule.signal}</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label">Signal (RSSI)</span>
-                    <span class="metric-value">
-                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
-                        ${signal} dBm
-                    </span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Recent Captures</span>
-                    <span class="metric-value">
-                        <svg class="metric-icon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                        ${stats.count}
-                    </span>
+                <div class="detail-row">
+                    <span style="color: var(--text-secondary);">Power / Battery</span>
+                    <span>${mule.battery}</span>
                 </div>
             </div>
         `;
-        docFrag.appendChild(card);
+        docFragMule.appendChild(card);
     });
-
-    dashboardGrid.appendChild(docFrag);
+    mulesGrid.appendChild(docFragMule);
 }
 
 function renderGallery(images) {
@@ -705,10 +721,10 @@ function renderGallery(images) {
 
     // Calculate stats
     totalCountEl.parentElement.classList.remove('loading-pulse');
-    activeMulesEl.parentElement.classList.remove('loading-pulse');
+    activeCamerasEl.parentElement.classList.remove('loading-pulse');
 
-    const uniqueMules = new Set(images.map(img => img.mule_id));
-    updateStats(images.length, uniqueMules.size);
+    const uniqueCameras = new Set(images.map(img => img.camera_id));
+    updateStats(images.length, uniqueCameras.size);
 
     const docFrag = document.createDocumentFragment();
     galleryGrid.innerHTML = ''; // Clear previous images before re-rendering
@@ -736,7 +752,7 @@ function renderGallery(images) {
         if (img.ai_data && img.ai_data.awaiting_id === true) {
             aiBadgesHtml += `<span class="badge-tag" style="background: rgba(250, 204, 21, 0.2); color: #facc15; border-color: rgba(250, 204, 21, 0.4);" title="Image has not been analyzed yet">⏳ Awaiting ID</span>`;
         } else {
-            for (const [tag, count] of Object.entries(aiTags)) {
+            for (const tag of Object.keys(aiTags)) {
                 let icon = '';
                 const tLower = tag.toLowerCase();
                 if (tLower.includes('deer') || tLower.includes('buck') || tLower.includes('doe')) icon = '🦌 ';
@@ -747,7 +763,7 @@ function renderGallery(images) {
                 else if (tLower.includes('vehicle') || tLower.includes('car') || tLower.includes('truck') || tLower.includes('atv')) icon = '🚙 ';
 
                 // Use window.searchTag global function to allow auto-labeling filter
-                aiBadgesHtml += `<span class="badge-tag" style="cursor: pointer;" onclick="searchTag('${tag}')" title="Search this tag">${icon}${tag} (${count})</span>`;
+                aiBadgesHtml += `<span class="badge-tag" style="cursor: pointer;" onclick="searchTag('${tag}')" title="Search this tag">${icon}${tag}</span>`;
             }
             if (Object.keys(aiTags).length === 0 && (!img.ai_data || !img.ai_data.has_animals)) {
                 aiBadgesHtml += `<span class="badge-tag" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8; border-color: rgba(148, 163, 184, 0.4);" title="No wildlife detected">∅ Empty</span>`;
@@ -807,7 +823,7 @@ function renderGallery(images) {
                 ${badgeContainer}
                 <div class="card-metadata">
                     <div class="meta-row">
-                        <span class="mule-id" title="${img.mule_id}">${getMuleName(img.mule_id)}</span>
+                        <span class="camera-id" title="${img.camera_id}">${getCameraName(img.camera_id)}</span>
                     </div>
                     <div class="meta-row meta-split">
                         <span class="card-filename" title="${img.filename}">${img.filename}</span>
@@ -832,9 +848,9 @@ function renderGallery(images) {
     }
 }
 
-function updateStats(total, mules) {
+function updateStats(total, cameras) {
     totalCountEl.textContent = total;
-    activeMulesEl.textContent = mules;
+    activeCamerasEl.textContent = cameras;
 }
 
 function toggleImageSelection(key) {
@@ -880,7 +896,7 @@ logoutBtn.addEventListener('click', logout);
 sortSelect.addEventListener('change', applySortAndRender);
 startDateInput.addEventListener('change', applySortAndRender);
 endDateInput.addEventListener('change', applySortAndRender);
-if (muleFilter) muleFilter.addEventListener('change', () => { currentNextToken = null; applySortAndRender(); });
+if (cameraFilter) cameraFilter.addEventListener('change', () => { currentNextToken = null; applySortAndRender(); });
 aiFilterCheckboxes.forEach(cb => cb.addEventListener('change', applySortAndRender));
 
 if (aiSearchInput) {
@@ -1118,74 +1134,6 @@ bulkDeleteBtn.addEventListener('click', async () => {
 });
 
 
-
-generateTimelapseBtn.addEventListener('click', async () => {
-    // Only allow if we have active mules
-    const uniqueMules = [...new Set(cachedImages.map(img => img.mule_id))];
-    if (uniqueMules.length === 0) {
-        alert("No cameras available.");
-        return;
-    }
-
-    // Create a simple prompt message listing available IDs
-    const muleList = uniqueMules.map(id => `${id} (${getMuleName(id)})`).join('\n');
-    let promptMsg = `Enter the Camera ID to generate a timelapse for:\n\nAvailable Cameras:\n${muleList}`;
-
-    const targetMule = prompt(promptMsg);
-    if (!targetMule) return;
-
-    // Verify it exists in our list
-    const actualId = targetMule.trim().toUpperCase();
-    if (!uniqueMules.includes(actualId) && !Object.values(muleMappings).some(m => m.name === targetMule || m === targetMule)) {
-        alert("Invalid Camera ID.");
-        return;
-    }
-
-    // Resolve name back to ID if they typed the human name
-    let finalId = actualId;
-    for (const [id, data] of Object.entries(muleMappings)) {
-        if ((typeof data === 'object' && data.name === targetMule) || data === targetMule) {
-            finalId = id;
-            break;
-        }
-    }
-
-    generateTimelapseBtn.disabled = true;
-    generateTimelapseBtn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>';
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/generate-timelapse`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
-            body: JSON.stringify({ mule_id: finalId, fps: 5 })
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Generation failed");
-
-        // Success - trigger download
-        alert(`Success! Generated timelapse with ${data.frames} frames.`);
-        const a = document.createElement('a');
-        a.href = data.url;
-        a.download = data.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-
-    } catch (err) {
-        alert(`Failed to generate timelapse: ${err.message}`);
-        console.error(err);
-    } finally {
-        generateTimelapseBtn.disabled = false;
-        generateTimelapseBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-                <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-            </svg>
-        `;
-    }
-});
-
 // --- Settings Dashboard ---
 configBtn.addEventListener('click', () => {
     renderMappingsList();
@@ -1217,8 +1165,8 @@ configBtn.addEventListener('click', () => {
             configMap.on('click', (e) => {
                 const lat = e.latlng.lat.toFixed(6);
                 const lng = e.latlng.lng.toFixed(6);
-                newMuleLatInput.value = lat;
-                newMuleLngInput.value = lng;
+                newCameraLatInput.value = lat;
+                newCameraLngInput.value = lng;
 
                 if (configTempMarker) configMap.removeLayer(configTempMarker);
                 configTempMarker = L.marker([lat, lng]).addTo(configMap);
@@ -1226,16 +1174,16 @@ configBtn.addEventListener('click', () => {
 
             // Handle manual coordinate entry
             const updateMapFromInputs = () => {
-                const lat = parseFloat(newMuleLatInput.value);
-                const lng = parseFloat(newMuleLngInput.value);
+                const lat = parseFloat(newCameraLatInput.value);
+                const lng = parseFloat(newCameraLngInput.value);
                 if (!isNaN(lat) && !isNaN(lng)) {
                     if (configTempMarker) configMap.removeLayer(configTempMarker);
                     configTempMarker = L.marker([lat, lng]).addTo(configMap);
                     configMap.setView([lat, lng], 16);
                 }
             };
-            newMuleLatInput.addEventListener('input', updateMapFromInputs);
-            newMuleLngInput.addEventListener('input', updateMapFromInputs);
+            newCameraLatInput.addEventListener('input', updateMapFromInputs);
+            newCameraLngInput.addEventListener('input', updateMapFromInputs);
         } else {
             // Only invalidate if the map tab is active
             const activeTab = document.querySelector('.settings-tab-btn.active');
@@ -1259,8 +1207,8 @@ function plotSavedCamerasOnMap() {
     let hasPins = false;
 
     // Plot all saved cameras
-    Object.keys(muleMappings).forEach(id => {
-        const data = muleMappings[id];
+    Object.keys(cameraMappings).forEach(id => {
+        const data = cameraMappings[id];
         if (data && typeof data === 'object' && data.lat !== undefined && data.lng !== undefined) {
             const name = data.name || id;
             const marker = L.marker([data.lat, data.lng]).addTo(configMap)
@@ -1324,16 +1272,16 @@ function renderMappingsList() {
         plotSavedCamerasOnMap();
     }
 
-    // Collect all known mules from mappings AND from active images
-    const activeMulesFromImages = new Set(cachedImages.map(img => img.mule_id));
-    const allMuleIds = new Set([...Object.keys(muleMappings), ...activeMulesFromImages]);
+    // Collect all known cameras from mappings AND from active images
+    const activeCamerasFromImages = new Set(cachedImages.map(img => img.camera_id));
+    const allCameraIds = new Set([...Object.keys(cameraMappings), ...activeCamerasFromImages]);
 
-    for (const id of Array.from(allMuleIds).sort()) {
-        const data = muleMappings[id];
+    for (const id of Array.from(allCameraIds).sort()) {
+        const data = cameraMappings[id];
         const name = (data && typeof data === 'object') ? data.name : (data || id);
         const locInputs = `
-            <input type="text" class="mule-lat-input" data-id="${id}" value="${data && data.lat ? data.lat : ''}" placeholder="Lat" style="flex: 0 1 80px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
-            <input type="text" class="mule-lng-input" data-id="${id}" value="${data && data.lng ? data.lng : ''}" placeholder="Lng" style="flex: 0 1 80px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+            <input type="text" class="camera-lat-input" data-id="${id}" value="${data && data.lat ? data.lat : ''}" placeholder="Lat" style="flex: 0 1 80px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+            <input type="text" class="camera-lng-input" data-id="${id}" value="${data && data.lng ? data.lng : ''}" placeholder="Lng" style="flex: 0 1 80px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
         `;
 
         const row = document.createElement('div');
@@ -1345,7 +1293,7 @@ function renderMappingsList() {
         row.style.gap = '0.5rem';
         row.innerHTML = `
             <strong style="min-width: 65px; font-size: 0.9rem;">${id}</strong>
-            <input type="text" class="mule-rename-input" data-id="${id}" value="${name !== id ? name : ''}" placeholder="Custom Name" style="flex:1; min-width: 120px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
+            <input type="text" class="camera-rename-input" data-id="${id}" value="${name !== id ? name : ''}" placeholder="Custom Name" style="flex:1; min-width: 120px; padding: 0.3rem 0.5rem; font-size: 0.85rem; border-radius:3px; border:1px solid var(--border); background:var(--bg-content); color:var(--text-main);">
             ${locInputs}
             <button class="btn-outline" style="padding: 0.2rem 0.4rem; font-size: 0.8rem; color: var(--error); border-color: rgba(239, 68, 68, 0.5);" onclick="removeMapping('${id}')" title="Delete Saved Mapping">X</button>
         `;
@@ -1353,58 +1301,58 @@ function renderMappingsList() {
     }
 
     // Add event listeners to all rename inputs to live-update the mapping dictionary
-    document.querySelectorAll('.mule-rename-input').forEach(input => {
+    document.querySelectorAll('.camera-rename-input').forEach(input => {
         input.addEventListener('change', (e) => {
             const id = e.target.dataset.id;
             const newName = e.target.value.trim();
             if (newName) {
-                if (typeof muleMappings[id] === 'object') {
-                    muleMappings[id].name = newName;
+                if (typeof cameraMappings[id] === 'object') {
+                    cameraMappings[id].name = newName;
                 } else {
-                    muleMappings[id] = newName;
+                    cameraMappings[id] = newName;
                 }
             } else {
                 // Remove name mapping if cleared, preserving location if exists
-                if (typeof muleMappings[id] === 'object') {
-                    muleMappings[id].name = id;
+                if (typeof cameraMappings[id] === 'object') {
+                    cameraMappings[id].name = id;
                 } else {
-                    delete muleMappings[id];
+                    delete cameraMappings[id];
                 }
             }
             // Trigger UI update natively
-            populateMuleFilter(cachedImages);
+            populateCameraFilter(cachedImages);
             applySortAndRender();
         });
     });
 
     // Add event listeners for inline coordinate editing
-    document.querySelectorAll('.mule-lat-input, .mule-lng-input').forEach(input => {
+    document.querySelectorAll('.camera-lat-input, .camera-lng-input').forEach(input => {
         input.addEventListener('change', (e) => {
             const id = e.target.dataset.id;
-            const isLat = e.target.classList.contains('mule-lat-input');
+            const isLat = e.target.classList.contains('camera-lat-input');
             const val = parseFloat(e.target.value);
 
             if (!isNaN(val)) {
-                if (typeof muleMappings[id] !== 'object') {
-                    muleMappings[id] = { name: muleMappings[id] || id };
+                if (typeof cameraMappings[id] !== 'object') {
+                    cameraMappings[id] = { name: cameraMappings[id] || id };
                 }
                 if (isLat) {
-                    muleMappings[id].lat = val;
+                    cameraMappings[id].lat = val;
                 } else {
-                    muleMappings[id].lng = val;
+                    cameraMappings[id].lng = val;
                 }
                 if (typeof plotSavedCamerasOnMap === 'function') plotSavedCamerasOnMap();
 
                 // Snap map to the newly edited pin
-                if (muleMappings[id].lat && muleMappings[id].lng && configMap) {
+                if (cameraMappings[id].lat && cameraMappings[id].lng && configMap) {
                     if (configTempMarker) configMap.removeLayer(configTempMarker);
-                    configMap.setView([muleMappings[id].lat, muleMappings[id].lng], 16);
+                    configMap.setView([cameraMappings[id].lat, cameraMappings[id].lng], 16);
                 }
             } else if (e.target.value.trim() === '') {
                 // Allow clearing the coordinate
-                if (typeof muleMappings[id] === 'object') {
-                    if (isLat) delete muleMappings[id].lat;
-                    else delete muleMappings[id].lng;
+                if (typeof cameraMappings[id] === 'object') {
+                    if (isLat) delete cameraMappings[id].lat;
+                    else delete cameraMappings[id].lng;
                     if (typeof plotSavedCamerasOnMap === 'function') plotSavedCamerasOnMap();
                 }
             }
@@ -1413,10 +1361,10 @@ function renderMappingsList() {
 }
 
 window.editMapping = function (id, name, lat, lng) {
-    document.getElementById('new-mule-id').value = id;
-    document.getElementById('new-mule-name').value = name;
-    document.getElementById('new-mule-lat').value = lat;
-    document.getElementById('new-mule-lng').value = lng;
+    document.getElementById('new-camera-id').value = id;
+    document.getElementById('new-camera-name').value = name;
+    document.getElementById('new-camera-lat').value = lat;
+    document.getElementById('new-camera-lng').value = lng;
 
     if (lat && lng && configMap) {
         if (configTempMarker) configMap.removeLayer(configTempMarker);
@@ -1426,29 +1374,29 @@ window.editMapping = function (id, name, lat, lng) {
 };
 
 window.removeMapping = function (id) {
-    delete muleMappings[id];
+    delete cameraMappings[id];
     renderMappingsList();
-    populateMuleFilter(cachedImages);
+    populateCameraFilter(cachedImages);
     applySortAndRender();
 };
 
 addMappingBtn.addEventListener('click', () => {
-    const id = newMuleIdInput.value.trim().toUpperCase();
-    const name = newMuleNameInput.value.trim();
-    const lat = newMuleLatInput.value;
-    const lng = newMuleLngInput.value;
+    const id = newCameraIdInput.value.trim().toUpperCase();
+    const name = newCameraNameInput.value.trim();
+    const lat = newCameraLatInput.value;
+    const lng = newCameraLngInput.value;
 
     if (id && name) {
         if (lat && lng) {
-            muleMappings[id] = { name: name, lat: parseFloat(lat), lng: parseFloat(lng) };
+            cameraMappings[id] = { name: name, lat: parseFloat(lat), lng: parseFloat(lng) };
         } else {
-            muleMappings[id] = { name: name };
+            cameraMappings[id] = { name: name };
         }
 
-        newMuleIdInput.value = '';
-        newMuleNameInput.value = '';
-        newMuleLatInput.value = '';
-        newMuleLngInput.value = '';
+        newCameraIdInput.value = '';
+        newCameraNameInput.value = '';
+        newCameraLatInput.value = '';
+        newCameraLngInput.value = '';
         if (configTempMarker) configMap.removeLayer(configTempMarker);
         renderMappingsList();
     } else if (id) {
@@ -1509,26 +1457,27 @@ function renderSubscribers(subscribers) {
         let routingHtml = '';
 
         // Derive master list of cameras from currently loaded S3 images and registered custom mappings
-        const uniqueMules = new Set();
+        const uniqueCameras = new Set();
         cachedImages.forEach(img => {
-            if (img.metadata && img.metadata.mule_id) {
-                uniqueMules.add(img.metadata.mule_id);
+            if (img.metadata && img.metadata.camera_id) {
+                uniqueCameras.add(img.metadata.camera_id);
             } else {
                 const filename = img.key.split('/').pop();
                 const parts = filename.split('_');
                 if (parts.length > 1 && parts[0].length > 0) {
-                    uniqueMules.add(parts[0].toUpperCase());
+                    uniqueCameras.add(parts[0].toUpperCase());
                 }
             }
         });
-        Object.keys(muleMappings).forEach(id => uniqueMules.add(id));
-        const allCameras = Array.from(uniqueMules).sort();
+        Object.keys(cameraMappings).forEach(id => uniqueCameras.add(id));
+        const allCameras = Array.from(uniqueCameras).sort();
 
         allCameras.forEach(camId => {
-            const camName = (muleMappings[camId] && muleMappings[camId].name) ? muleMappings[camId].name : camId;
+            const camName = (cameraMappings[camId] && cameraMappings[camId].name) ? cameraMappings[camId].name : camId;
             const activeTags = (sub.routing && sub.routing[camId]) ? sub.routing[camId] : [];
 
             const buckChecked = activeTags.includes('Antlered Buck') ? 'checked' : '';
+            const doeChecked = activeTags.includes('Doe/Young') ? 'checked' : '';
             const peopleChecked = activeTags.includes('Person') ? 'checked' : '';
 
             routingHtml += `
@@ -1537,12 +1486,18 @@ function renderSubscribers(subscribers) {
                     <div style="font-weight: 500;">${camId} (${camName})</div>
                 </div>
                 <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
-                        <input type="checkbox" class="route-checkbox" data-mule="${camId}" data-tag="Person" ${peopleChecked}> People Alerts
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
-                        <input type="checkbox" class="route-checkbox" data-mule="${camId}" data-tag="Antlered Buck" ${buckChecked}> Buck Alerts
-                    </label>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; font-weight: 500;">Alerts:</span>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                            <input type="checkbox" class="route-checkbox" data-camera="${camId}" data-tag="Antlered Buck" ${buckChecked}> Bucks
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                            <input type="checkbox" class="route-checkbox" data-camera="${camId}" data-tag="Doe/Young" ${doeChecked}> Does
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+                            <input type="checkbox" class="route-checkbox" data-camera="${camId}" data-tag="Person" ${peopleChecked}> People
+                        </label>
+                    </div>
                 </div>
             </div>`;
         });
@@ -1570,11 +1525,19 @@ function renderSubscribers(subscribers) {
                 </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
-                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                      <button class="btn-outline macro-select-deer" style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem;">Select all - Deer</button>
-                      <button class="btn-outline macro-select-people" style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem;">Select all - People</button>
-                      <button class="btn-outline macro-clear-all" style="flex: 1 1 auto; padding: 0.5rem; font-size: 0.8rem; color: var(--error); border-color: rgba(239, 68, 68, 0.3);">Clear all</button>
-                 </div>
+                <div style="padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1;">
+                            <span style="font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; font-weight: 500;">Select:</span>
+                            <div style="display: flex; gap: 0.5rem; flex-grow: 1;">
+                                <button class="btn-outline macro-select-bucks" style="flex: 1 1 auto; padding: 0.4rem; font-size: 0.8rem;">Bucks</button>
+                                <button class="btn-outline macro-select-does" style="flex: 1 1 auto; padding: 0.4rem; font-size: 0.8rem;">Does</button>
+                                <button class="btn-outline macro-select-people" style="flex: 1 1 auto; padding: 0.4rem; font-size: 0.8rem;">People</button>
+                            </div>
+                        </div>
+                        <button class="btn-outline macro-clear-all" style="flex: 0 0 auto; padding: 0.4rem 0.8rem; font-size: 0.8rem; color: var(--error); border-color: rgba(239, 68, 68, 0.3);">Clear all</button>
+                    </div>
+                </div>
                  ${routingHtml}
             </div>
         `;
@@ -1595,14 +1558,17 @@ function renderSubscribers(subscribers) {
 }
 
 function bindLocalMacros() {
-    document.querySelectorAll('.macro-select-deer').forEach(btn => {
-        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.parentElement.parentElement.querySelectorAll('.route-checkbox[data-tag="Antlered Buck"]')).forEach(chk => chk.checked = true); };
+    document.querySelectorAll('.macro-select-bucks').forEach(btn => {
+        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.closest('.subscriber-card').querySelectorAll('.route-checkbox[data-tag="Antlered Buck"]')).forEach(chk => chk.checked = true); };
+    });
+    document.querySelectorAll('.macro-select-does').forEach(btn => {
+        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.closest('.subscriber-card').querySelectorAll('.route-checkbox[data-tag="Doe/Young"]')).forEach(chk => chk.checked = true); };
     });
     document.querySelectorAll('.macro-select-people').forEach(btn => {
-        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.parentElement.parentElement.querySelectorAll('.route-checkbox[data-tag="Person"]')).forEach(chk => chk.checked = true); };
+        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.closest('.subscriber-card').querySelectorAll('.route-checkbox[data-tag="Person"]')).forEach(chk => chk.checked = true); };
     });
     document.querySelectorAll('.macro-clear-all').forEach(btn => {
-        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.parentElement.parentElement.querySelectorAll('.route-checkbox')).forEach(chk => chk.checked = false); };
+        btn.onclick = (e) => { e.preventDefault(); Array.from(btn.closest('.subscriber-card').querySelectorAll('.route-checkbox')).forEach(chk => chk.checked = false); };
     });
 }
 
@@ -1628,14 +1594,14 @@ function buildSubscribersPayload() {
         const allRoutes = card.querySelectorAll('.route-checkbox');
         allRoutes.forEach(chk => {
             if (chk.checked) {
-                const muleId = chk.getAttribute('data-mule');
+                const cameraId = chk.getAttribute('data-camera');
                 const tag = chk.getAttribute('data-tag');
 
-                if (!routing[muleId]) {
-                    routing[muleId] = [];
+                if (!routing[cameraId]) {
+                    routing[cameraId] = [];
                 }
                 if (tag) {
-                    routing[muleId].push(tag);
+                    routing[cameraId].push(tag);
                 }
             }
         });
@@ -1699,7 +1665,7 @@ if (saveMappingsBtn) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${AUTH_TOKEN}`
                 },
-                body: JSON.stringify({ action: 'save_mappings', mappings: muleMappings })
+                body: JSON.stringify({ action: 'save_mappings', mappings: cameraMappings })
             });
 
             if (!response.ok) {
@@ -1709,7 +1675,7 @@ if (saveMappingsBtn) {
             alert("Camera Dictionary successfully saved to the cloud!");
 
             // Hydrate the rest of the UI immediately without refresh
-            if (typeof populateMuleFilter === 'function') populateMuleFilter(cachedImages);
+            if (typeof populateCameraFilter === 'function') populateCameraFilter(cachedImages);
             if (typeof applySortAndRender === 'function') applySortAndRender();
             if (typeof fetchSubscribers === 'function') fetchSubscribers();
         } catch (error) {
@@ -1782,6 +1748,64 @@ saveGeneralBtn.addEventListener('click', async () => {
     }
 });
 
+let _forceAiStatusInterval = null;
+function lockForceAiBtn(secondsRemaining) {
+    if (!forceAiBtn) return;
+    forceAiBtn.disabled = true;
+
+    if (_forceAiStatusInterval) clearInterval(_forceAiStatusInterval);
+
+    let left = Math.floor(secondsRemaining);
+    _forceAiStatusInterval = setInterval(() => {
+        if (left <= 0) {
+            clearInterval(_forceAiStatusInterval);
+            forceAiBtn.textContent = "FORCE AI PROCESS";
+            forceAiBtn.disabled = false;
+        } else {
+            const m = Math.floor(left / 60);
+            const s = (left % 60).toString().padStart(2, '0');
+            forceAiBtn.textContent = `Processing (${m}m ${s}s)...`;
+            left--;
+        }
+    }, 1000);
+}
+
+forceAiBtn.addEventListener('click', async () => {
+    if (!confirm("This will force the remote system to process any un-cataloged trail camera shots. The results will not be immediate. Please wait at least 5 minutes before pressing again. Proceed?")) return;
+
+    forceAiBtn.textContent = "Processing...";
+    forceAiBtn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/manage-image`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${AUTH_TOKEN}`
+            },
+            body: JSON.stringify({ action: 'force_ai' })
+        });
+
+        if (response.status === 429) {
+            alert("AI Sweep is actively running or locked globally. Please wait 5 minutes.");
+            lockForceAiBtn(300);
+            return;
+        }
+
+        if (!response.ok) throw new Error("Force AI Process failed");
+
+        const data = await response.json();
+        alert(`Success! Dispatched AI Pipeline trigger. Please wait 5 minutes and refresh the page.`);
+        // Physically engage JS mechanical lock
+        lockForceAiBtn(300);
+    } catch (err) {
+        console.error(err);
+        alert("Failed to execute Force AI Process.");
+        forceAiBtn.textContent = "FORCE AI PROCESS";
+        forceAiBtn.disabled = false;
+    }
+});
+
 // --- Main Map Rendering ---
 function renderMap(images) {
     if (!mainMap) {
@@ -1806,15 +1830,15 @@ function renderMap(images) {
     const cameraStats = {};
 
     // Pre-populate all mapped cameras so they appear even with 0 images
-    Object.keys(muleMappings).forEach(id => {
-        const mapped = muleMappings[id];
+    Object.keys(cameraMappings).forEach(id => {
+        const mapped = cameraMappings[id];
         if (mapped && typeof mapped === 'object' && mapped.lat !== undefined && mapped.lng !== undefined) {
             cameraStats[id] = { count: 0, latestImage: null, bucks: 0, hunters: 0 };
         }
     });
 
     images.forEach(img => {
-        const id = img.mule_id;
+        const id = img.camera_id;
         if (!cameraStats[id]) {
             cameraStats[id] = { count: 0, latestImage: img, bucks: 0, hunters: 0 };
         }
@@ -1834,10 +1858,10 @@ function renderMap(images) {
     let hasValidPins = false;
 
     for (const [id, stats] of Object.entries(cameraStats)) {
-        const loc = getMuleLocation(id);
+        const loc = getCameraLocation(id);
         if (loc && loc.lat && loc.lng) {
             hasValidPins = true;
-            const name = getMuleName(id);
+            const name = getCameraName(id);
 
             let color = '#3b82f6';
             if (stats.hunters > 0) color = '#ef4444';

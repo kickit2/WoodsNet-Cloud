@@ -105,8 +105,23 @@ def lambda_handler(event, context):
 
     try:
         if action == 'delete':
+            print(f"Verifying DynamoDB Processing Lock for object: {key}")
+            dynamodb = boto3.client('dynamodb')
+            tag_table = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
+            
+            # TASK 2: Delete Lockout
+            resp = dynamodb.get_item(TableName=tag_table, Key={'ImageKey': {'S': key}})
+            if 'Item' not in resp:
+                return {
+                    'statusCode': 403,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': 'Delete blocked. Image is mid-processing or officially orphaned. Await AI completion or trigger a Force Sweep.'})
+                }
+                
             print(f"Deleting object: {key}")
             s3_client.delete_object(Bucket=bucket_name, Key=key)
+            dynamodb.delete_item(TableName=tag_table, Key={'ImageKey': {'S': key}})
+            
             return {
                 'statusCode': 200,
                 'headers': cors_headers,
@@ -132,10 +147,30 @@ def lambda_handler(event, context):
                         'body': json.dumps({'error': 'Invalid key format: path traversal detected.'})
                     }
                     
-            print(f"Bulk deleting {len(keys)} objects")
+            print(f"Verifying Bulk DynamoDB Locks for {len(keys)} objects")
+            dynamodb = boto3.client('dynamodb')
+            tag_table = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
             
-            # S3 delete_objects takes up to 1000 items at a time
-            objects_to_delete = [{'Key': urllib.parse.unquote(k)} for k in keys]
+            valid_keys = []
+            for i in range(0, len(keys), 100):
+                chunk = keys[i:i+100]
+                request_items = {tag_table: {'Keys': [{'ImageKey': {'S': urllib.parse.unquote(k)}} for k in chunk]}}
+                try:
+                    resp = dynamodb.batch_get_item(RequestItems=request_items)
+                    for item in resp.get('Responses', {}).get(tag_table, []):
+                        valid_keys.append(item['ImageKey']['S'])
+                except Exception as e:
+                    print(f"Error checking bulk delete locks: {e}")
+                    
+            if not valid_keys:
+                return {
+                    'statusCode': 403,
+                    'headers': cors_headers,
+                    'body': json.dumps({'error': 'All selected images are physically locked from deletion because AI processing is incomplete.'})
+                }
+                
+            print(f"Bulk deleting {len(valid_keys)} fully-processed objects")
+            objects_to_delete = [{'Key': urllib.parse.unquote(k)} for k in valid_keys]
             
             for i in range(0, len(objects_to_delete), 1000):
                 chunk = objects_to_delete[i:i + 1000]
@@ -147,10 +182,16 @@ def lambda_handler(event, context):
                     }
                 )
                 
+            # Sync DynamoDB Deletions
+            for i in range(0, len(valid_keys), 25):
+                chunk = valid_keys[i:i+25]
+                delete_requests = [{'DeleteRequest': {'Key': {'ImageKey': {'S': k}}}} for k in chunk]
+                dynamodb.batch_write_item(RequestItems={tag_table: delete_requests})
+                
             return {
                 'statusCode': 200,
                 'headers': cors_headers,
-                'body': json.dumps({'message': f'Successfully deleted {len(keys)} objects'})
+                'body': json.dumps({'message': f'Successfully deleted {len(valid_keys)} objects. {len(keys)-len(valid_keys)} skipped due to processing locks.'})
             }
             
         elif action == 'save_notification_prefs':
@@ -347,17 +388,107 @@ def lambda_handler(event, context):
             
         elif action == 'save_mappings':
             mappings = body.get('mappings', {})
-            print(f"Saving mule mappings: {mappings}")
+            print(f"Saving camera mappings: {mappings}")
             s3_client.put_object(
                 Bucket=bucket_name,
-                Key='_config/mule_mappings.json',
+                Key='_config/camera_mappings.json',
                 Body=json.dumps(mappings).encode('utf-8'),
                 ContentType='application/json'
             )
             return {
                 'statusCode': 200,
                 'headers': cors_headers,
-                'body': json.dumps({'message': 'Successfully saved mule mappings config.'})
+                'body': json.dumps({'message': 'Successfully saved camera mappings config.'})
+            }
+            
+        elif action == 'force_ai':
+            import time
+            dynamodb = boto3.client('dynamodb')
+            tag_table = os.environ.get('DYNAMODB_TABLE_NAME', 'WoodsNetImageTags')
+            
+            # TASK 1: Global 5-Minute Lock (DynamoDB)
+            now = int(time.time())
+            try:
+                lock_resp = dynamodb.get_item(
+                    TableName='WoodsNetNotificationPrefs',
+                    Key={'ConfigKey': {'S': 'AI_PROCESSING_LOCK'}}
+                )
+                if 'Item' in lock_resp:
+                    last_lock = int(lock_resp['Item'].get('Timestamp', {}).get('N', '0'))
+                    if now - last_lock < 300:
+                        return {
+                            'statusCode': 429,
+                            'headers': cors_headers,
+                            'body': json.dumps({'error': 'Global Sweep lock is currently active.'})
+                        }
+            except Exception as e:
+                print(f"Lock check failed, proceeding: {e}")
+                
+            # Set Lock
+            dynamodb.update_item(
+                TableName='WoodsNetNotificationPrefs',
+                Key={'ConfigKey': {'S': 'AI_PROCESSING_LOCK'}},
+                UpdateExpression='SET #ts = :t',
+                ExpressionAttributeNames={'#ts': 'Timestamp'},
+                ExpressionAttributeValues={':t': {'N': str(now)}}
+            )
+            
+            # Orphan Intel Engine
+            s3_keys = []
+            try:
+                s3_resp = s3_client.list_objects_v2(Bucket=bucket_name, Prefix='woods-net/cameras/', MaxKeys=1000)
+                if 'Contents' in s3_resp:
+                    for obj in s3_resp['Contents']:
+                        if obj['Key'].lower().endswith(('.avif', '.jpg', '.jpeg')):
+                            s3_keys.append(obj['Key'])
+            except Exception as e:
+                print(f"S3 list_objects error: {e}")
+                
+            orphans = []
+            for i in range(0, len(s3_keys), 100):
+                chunk = s3_keys[i:i+100]
+                request_items = {tag_table: {'Keys': [{'ImageKey': {'S': k}} for k in chunk]}}
+                try:
+                    resp = dynamodb.batch_get_item(RequestItems=request_items)
+                    existing_keys = [item['ImageKey']['S'] for item in resp.get('Responses', {}).get(tag_table, [])]
+                    orphans.extend([k for k in chunk if k not in existing_keys])
+                except Exception as e:
+                    print(f"DynamoDB batch error: {e}")
+                    
+            # Background Striker (SQS Message Broker Burst)
+            sqs_client = boto3.client('sqs')
+            try:
+                queue_url = sqs_client.get_queue_url(QueueName='WoodsNetAIQueue')['QueueUrl']
+            except Exception as e:
+                print(f"Failed to find WoodsNetAIQueue: {e}")
+                queue_url = None
+                
+            dispatched = 0
+            if queue_url:
+                # SQS allows maximum batch size of 10 messages
+                for i in range(0, len(orphans), 10):
+                    batch = orphans[i:i+10]
+                    entries = []
+                    for idx, orphan_key in enumerate(batch):
+                        payload = {
+                            "Records": [
+                                {"s3": {"bucket": {"name": bucket_name}, "object": {"key": orphan_key}}}
+                            ]
+                        }
+                        entries.append({
+                            'Id': str(idx),
+                            'MessageBody': json.dumps(payload)
+                        })
+                    try:
+                        sqs_client.send_message_batch(QueueUrl=queue_url, Entries=entries)
+                        dispatched += len(batch)
+                    except Exception as e:
+                        print(f"Failed to push batch to SQS: {e}")
+                    
+            return {
+                'statusCode': 200,
+                'headers': cors_headers,
+                'body': json.dumps({'message': 'Force AI executed', 'invoked_count': dispatched})
             }
             
         else:

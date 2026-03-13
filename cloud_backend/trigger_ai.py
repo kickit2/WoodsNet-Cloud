@@ -6,7 +6,7 @@ def main():
     lam = boto3.client('lambda', region_name='us-east-1')
     
     bucket = 'woods-net-storage'
-    prefix = 'woods-net/mules/'
+    prefix = 'woods-net/cameras/'
     
     print(f"Scanning bucket {bucket} for objects in {prefix}...")
     

@@ -15,7 +15,7 @@ class CloudUploader:
     def __init__(self, api_url):
         self.api_url = api_url
 
-    def upload_file_async(self, file_path, filename, mule_id):
+    def upload_file_async(self, file_path, filename, camera_id):
         """
         Dispatches the upload process to a background thread to prevent
         blocking the single-threaded PyXBee radio ingestion loop.
@@ -26,13 +26,13 @@ class CloudUploader:
 
         thread = threading.Thread(
             target=self._execute_upload,
-            args=(file_path, filename, mule_id),
+            args=(file_path, filename, camera_id),
             daemon=True
         )
         thread.start()
         _log(f"Spawned background upload thread for {filename}")
 
-    def _execute_upload(self, file_path, filename, mule_id):
+    def _execute_upload(self, file_path, filename, camera_id):
         """
         The blocking logic to fetch the URL and push to S3.
         Includes a basic 3-attempt retry loop for network resilience.
@@ -49,7 +49,7 @@ class CloudUploader:
                 _log(f"Attempt {attempt}/{max_retries}: Requesting S3 URL for {filename}...")
                 response = requests.get(
                     self.api_url, 
-                    params={'filename': filename, 'mule_id': mule_id},
+                    params={'filename': filename, 'camera_id': camera_id},
                     timeout=10 # Fail fast to retry
                 )
                 

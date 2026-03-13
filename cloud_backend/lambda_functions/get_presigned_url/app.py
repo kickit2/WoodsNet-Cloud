@@ -18,7 +18,7 @@ def lambda_handler(event, context):
             }
 
         filename = query_params.get('filename')
-        mule_id = query_params.get('mule_id', 'unknown_mule')
+        camera_id = query_params.get('camera_id', 'unknown_camera')
         
         if not filename:
             return {
@@ -35,8 +35,8 @@ def lambda_handler(event, context):
             }
 
         # Construct the object key (path in the bucket)
-        # e.g., woods-net/mules/MULE05/IMG0004_SZ451234.avif
-        object_key = f"woods-net/mules/{mule_id}/{filename}"
+        # e.g., woods-net/cameras/CAM01/IMG0004_SZ451234.avif
+        object_key = f"woods-net/cameras/{camera_id}/{filename}"
 
         # Initialize S3 client
         # Note: boto3 automatically uses the Lambda execution role's credentials

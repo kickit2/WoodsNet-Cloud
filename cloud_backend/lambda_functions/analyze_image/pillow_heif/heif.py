@@ -1,8 +1,9 @@
 """Functions and classes for heif images to read and write."""
 
+from __future__ import annotations
+
 from copy import copy, deepcopy
 from io import SEEK_SET
-from threading import Lock
 from typing import Any
 
 from PIL import Image
@@ -52,7 +53,6 @@ class BaseImage:
         self.size, self.mode = c_image.size_mode
         self._c_image = c_image
         self._data = None
-        self._load_lock = Lock()
 
     @property
     def data(self):
@@ -111,11 +111,8 @@ class BaseImage:
             when reading `data` or `stride` property of image will be loaded automatically.
         """
         if not self._data:
-            with self._load_lock:
-                if not self._data:
-                    data = self._c_image.data
-                    self.size, _ = self._c_image.size_mode
-                    self._data = data
+            self._data = self._c_image.data
+            self.size, _ = self._c_image.size_mode
 
 
 class HeifDepthImage(BaseImage):
@@ -182,9 +179,6 @@ class HeifImage(BaseImage):
             self.info["xmp"] = xmp
         if heif_meta:
             self.info["heif"] = heif_meta
-        pixel_aspect_ratio = c_image.pixel_aspect_ratio
-        if pixel_aspect_ratio:
-            self.info["pixel_aspect_ratio"] = pixel_aspect_ratio
         save_colorspace_chroma(c_image, self.info)
         color_profile: dict[str, Any] = c_image.color_profile
         if color_profile:
@@ -469,7 +463,7 @@ class HeifFile:
             img.size,
             img.tobytes(),
         )
-        for key in ["bit_depth", "thumbnails", "icc_profile", "icc_profile_type", "pixel_aspect_ratio"]:
+        for key in ["bit_depth", "thumbnails", "icc_profile", "icc_profile_type"]:
             if key in image.info:
                 added_image.info[key] = image.info[key]
         for key in ["nclx_profile", "metadata"]:

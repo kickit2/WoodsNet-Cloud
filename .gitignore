@@ -16,3 +16,4 @@ Thumbs.db
 node_modules/
 .idea/
 .vscode/
+woods-net-deployer_accessKeys.csv

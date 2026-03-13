@@ -237,12 +237,12 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
              },
              {
                  "Effect": "Allow",
-                 "Action": ["rekognition:DetectLabels"],
+                 "Action": ["rekognition:DetectLabels", "lambda:InvokeFunction"],
                  "Resource": "*"
              },
              {
                  "Effect": "Allow",
-                 "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Scan", "dynamodb:GetItem", "dynamodb:BatchGetItem"],
+                 "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Scan", "dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem"],
                  "Resource": [
                      f"arn:aws:dynamodb:{region}:{account_id}:table/{table_name}",
                      f"arn:aws:dynamodb:{region}:{account_id}:table/WoodsNetNotificationPrefs",
@@ -253,6 +253,11 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                  "Effect": "Allow",
                  "Action": ["sns:Publish"],
                  "Resource": sns_topic_arn
+             },
+             {
+                 "Effect": "Allow",
+                 "Action": ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"],
+                 "Resource": f"arn:aws:sqs:{region}:{account_id}:WoodsNetAIQueue*"
              }
         ]
     }
@@ -277,7 +282,7 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
     
     role_arn = f"arn:aws:iam::{account_id}:role/{role_name}"
     
-    def deploy_lambda(func_name, code_path, extra_env=None, timeout=10):
+    def deploy_lambda(func_name, code_path, extra_env=None, timeout=10, memory_size=128):
         if code_path.endswith('.zip'):
             zip_path = code_path
             with open(zip_path, 'rb') as f:
@@ -306,7 +311,8 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                 Handler='app.lambda_handler',
                 Code={'ZipFile': zipped_code},
                 Environment={'Variables': env_vars},
-                Timeout=timeout
+                Timeout=timeout,
+                MemorySize=memory_size
             )
             print(f"    -> {func_name} created successfully.")
         except lambda_client.exceptions.ResourceConflictException:
@@ -324,7 +330,8 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
                 FunctionName=func_name,
                 Runtime='python3.12',
                 Environment={'Variables': env_vars},
-                Timeout=timeout
+                Timeout=timeout,
+                MemorySize=memory_size
             )
             print(f"    -> {func_name} updated.")
             
@@ -335,55 +342,57 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
 
     upload_lambda_arn = deploy_lambda(upload_func_name, 'lambda_functions/get_presigned_url/app.py')
     list_lambda_arn = deploy_lambda(list_func_name, 'lambda_functions/list_images/app.py')
-    manage_lambda_arn = deploy_lambda(manage_func_name, 'lambda_functions/manage_image/app.py')
-    timelapse_func_name = 'WoodsNetGenerateTimelapse'
-    timelapse_lambda_arn = deploy_lambda(timelapse_func_name, 'lambda_functions/generate_timelapse/app.py', timeout=60)
+    manage_lambda_arn = deploy_lambda(manage_func_name, 'lambda_functions/manage_image/app.py', timeout=29)
     
     analyze_func_name = 'WoodsNetAnalyzeImage'
     analyze_env = {'SNS_TOPIC_ARN': sns_topic_arn}
     if custom_labels_arn:
         analyze_env['CUSTOM_LABELS_PROJECT_ARN'] = custom_labels_arn
         
-    analyze_lambda_arn = deploy_lambda(analyze_func_name, 'lambda_functions/analyze_image/analyze.zip', extra_env=analyze_env)
+    analyze_lambda_arn = deploy_lambda(analyze_func_name, 'lambda_functions/analyze_image/analyze.zip', extra_env=analyze_env, timeout=30, memory_size=512)
 
     # ==========================================
-    # 3.5 Configure S3 Event Trigger for AI Lambda
+    # 3.5 Provision SQS & Configure S3 Event Trigger
     # ==========================================
-    print(f"\n[3.5] Configuring S3 Event Trigger for {analyze_func_name}")
-    try:
-        lambda_client.remove_permission(
-            FunctionName=analyze_func_name,
-            StatementId='s3-invoke-permission'
-        )
-    except lambda_client.exceptions.ResourceNotFoundException:
-        pass
+    
+    sqs_client = boto3.client('sqs', region_name=region)
+    dlq_name = 'WoodsNetAIQueueDLQ'
+    main_queue_name = 'WoodsNetAIQueue'
+    print(f"\n[3.5] Provisioning SQS Queues & S3 Triggers")
+    
+    dlq_url = sqs_client.create_queue(QueueName=dlq_name)['QueueUrl']
+    dlq_arn = sqs_client.get_queue_attributes(QueueUrl=dlq_url, AttributeNames=['QueueArn'])['Attributes']['QueueArn']
+    redrive_policy = {'deadLetterTargetArn': dlq_arn, 'maxReceiveCount': '3'}
+    
+    main_queue_url = sqs_client.create_queue(
+        QueueName=main_queue_name,
+        Attributes={'VisibilityTimeout': '120', 'RedrivePolicy': json.dumps(redrive_policy)}
+    )['QueueUrl']
+    main_queue_arn = sqs_client.get_queue_attributes(QueueUrl=main_queue_url, AttributeNames=['QueueArn'])['Attributes']['QueueArn']
 
-    try:
-        lambda_client.add_permission(
-            FunctionName=analyze_func_name,
-            StatementId='s3-invoke-permission',
-            Action='lambda:InvokeFunction',
-            Principal='s3.amazonaws.com',
-            SourceArn=f"arn:aws:s3:::{bucket_name}",
-            SourceAccount=account_id
-        )
-    except Exception as e:
-        print(f"    -> Warning setting permission: {e}")
-
-    print("    -> Waiting 5s for IAM policy propagation...")
-    time.sleep(5)
+    sqs_policy = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Service": "s3.amazonaws.com"},
+            "Action": "sqs:SendMessage",
+            "Resource": main_queue_arn,
+            "Condition": {"ArnLike": {"aws:SourceArn": f"arn:aws:s3:::{bucket_name}"}}
+        }]
+    }
+    sqs_client.set_queue_attributes(QueueUrl=main_queue_url, Attributes={'Policy': json.dumps(sqs_policy)})
 
     s3_client.put_bucket_notification_configuration(
         Bucket=bucket_name,
         NotificationConfiguration={
-            'LambdaFunctionConfigurations': [
+            'QueueConfigurations': [
                 {
-                    'LambdaFunctionArn': analyze_lambda_arn,
+                    'QueueArn': main_queue_arn,
                     'Events': ['s3:ObjectCreated:Put'],
                     'Filter': {
                         'Key': {
                             'FilterRules': [
-                                {'Name': 'prefix', 'Value': 'woods-net/mules/'}
+                                {'Name': 'prefix', 'Value': 'woods-net/cameras/'}
                             ]
                         }
                     }
@@ -391,7 +400,18 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
             ]
         }
     )
-    print("    -> S3 Trigger Configured.")
+    print("    -> SQS Queues and S3 Triggers Configured.")
+
+    try:
+        lambda_client.create_event_source_mapping(
+            EventSourceArn=main_queue_arn,
+            FunctionName=analyze_func_name,
+            Enabled=True,
+            BatchSize=1
+        )
+        print("    -> Event Source Mapping Created.")
+    except lambda_client.exceptions.ResourceConflictException:
+        print("    -> Event Source Mapping already exists.")
 
     # ==========================================
     # 4. Create HTTP API Gateway Routes
@@ -471,7 +491,6 @@ def deploy_aws_infrastructure(bucket_name, region, domain=None, custom_labels_ar
     create_api_route(upload_func_name, upload_lambda_arn, 'GET /get-upload-url')
     create_api_route(list_func_name, list_lambda_arn, 'GET /list-images')
     create_api_route(manage_func_name, manage_lambda_arn, 'POST /manage-image')
-    create_api_route(timelapse_func_name, timelapse_lambda_arn, 'POST /generate-timelapse')
 
         
     # Create Stage
